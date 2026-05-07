@@ -1,6 +1,6 @@
 # Media-Magic
 
-Production-ready macOS automation script to orchestrate media conversion for Apple TV app compatible files (`.m4v`/`.mp4`) using:
+Production-ready macOS automation script to orchestrate media conversion for Apple TV app-compatible files (`.m4v`/`.mp4`) using:
 
 1. MakeMKV (Blu-ray rip stage)
 2. HandBrakeCLI (`Apple 2160p60 4K HEVC Surround` preset)
@@ -9,13 +9,13 @@ Production-ready macOS automation script to orchestrate media conversion for App
 
 ## Script
 
-- `/home/runner/work/Media-Magic/Media-Magic/media_magic.sh`
+- `./media_magic.sh`
 
 ## Run
 
 ```bash
-chmod +x /home/runner/work/Media-Magic/Media-Magic/media_magic.sh
-/home/runner/work/Media-Magic/Media-Magic/media_magic.sh
+chmod +x ./media_magic.sh
+./media_magic.sh
 ```
 
 The script uses **native macOS dialogs** (`osascript`) for:

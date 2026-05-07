@@ -24,10 +24,13 @@
 # - SublerCLI metadata search flags differ by build; script tries two known
 #   syntaxes and logs failures so users can adapt to local SublerCLI behavior.
 
+# Intentionally avoid `set -e` because this workflow must continue processing
+# remaining files after per-file stage failures.
 set -uo pipefail
 
 HANDBRAKE_PRESET="Apple 2160p60 4K HEVC Surround"
 MAKEMKV_DISC_SELECTOR="disc:0"
+FILEBOT_FORMAT="{n} ({y})"
 
 SCRIPT_NAME="Media Magic"
 START_EPOCH="$(date +%s)"
@@ -46,20 +49,33 @@ RIP_DIR=""
 
 SOURCE_FILES=()
 COMPLETED_TITLES=()
+FAILED_ITEMS=()
 
 show_alert() {
   local message="$1"
-  osascript -e "display alert \"${SCRIPT_NAME}\" message \"${message//\"/\\\"}\" as critical buttons {\"OK\"} default button \"OK\"" >/dev/null
+  osascript - "$SCRIPT_NAME" "$message" <<'APPLESCRIPT' >/dev/null
+on run argv
+  display alert (item 1 of argv) message (item 2 of argv) as critical buttons {"OK"} default button "OK"
+end run
+APPLESCRIPT
 }
 
 show_dialog() {
   local message="$1"
-  osascript -e "display dialog \"${message//\"/\\\"}\" with title \"${SCRIPT_NAME}\" buttons {\"OK\"} default button \"OK\"" >/dev/null
+  osascript - "$SCRIPT_NAME" "$message" <<'APPLESCRIPT' >/dev/null
+on run argv
+  display dialog (item 2 of argv) with title (item 1 of argv) buttons {"OK"} default button "OK"
+end run
+APPLESCRIPT
 }
 
 show_notification() {
   local message="$1"
-  osascript -e "display notification \"${message//\"/\\\"}\" with title \"${SCRIPT_NAME}\"" >/dev/null
+  osascript - "$SCRIPT_NAME" "$message" <<'APPLESCRIPT' >/dev/null
+on run argv
+  display notification (item 2 of argv) with title (item 1 of argv)
+end run
+APPLESCRIPT
 }
 
 choose_from_list() {
@@ -78,7 +94,11 @@ APPLESCRIPT
 
 choose_folder() {
   local prompt="$1"
-  osascript -e "POSIX path of (choose folder with prompt \"${prompt//\"/\\\"}\")"
+  osascript - "$prompt" <<'APPLESCRIPT'
+on run argv
+  return POSIX path of (choose folder with prompt (item 1 of argv))
+end run
+APPLESCRIPT
 }
 
 choose_files() {
@@ -126,6 +146,7 @@ resolve_tool_path() {
 }
 
 list_media_files() {
+  # Include both extensions because FileBot/Subler workflows may preserve or emit either container.
   find "$OUTPUT_DIR" -maxdepth 1 -type f \( -name "*.m4v" -o -name "*.mp4" \) | LC_ALL=C sort
 }
 
@@ -211,10 +232,10 @@ log_line "FileBot path: $FILEBOT"
 log_line "Subler path: $SUBLER"
 
 # Version checks logged for troubleshooting cross-version CLI changes
-run_and_log "version" "$MAKEMKV" --version || true
-run_and_log "version" "$HANDBRAKE" --version || true
-run_and_log "version" "$FILEBOT" -version || run_and_log "version" "$FILEBOT" --version || true
-run_and_log "version" "$SUBLER" --help || run_and_log "version" "$SUBLER" -h || true
+run_and_log "version" "$MAKEMKV" --version || log_line "WARNING: MakeMKV version check failed."
+run_and_log "version" "$HANDBRAKE" --version || log_line "WARNING: HandBrake version check failed."
+run_and_log "version" "$FILEBOT" -version || run_and_log "version" "$FILEBOT" --version || log_line "WARNING: FileBot version check failed."
+run_and_log "version" "$SUBLER" --help || run_and_log "version" "$SUBLER" -h || log_line "WARNING: SublerCLI help/version check failed."
 
 # Verify required HandBrake preset exists before processing
 if ! "$HANDBRAKE" --preset-list 2>>"$LOG_FILE" | grep -Fq "$HANDBRAKE_PRESET"; then
@@ -256,12 +277,12 @@ process_video_file() {
     return 1
   fi
 
-  filebot_before="$(mktemp /tmp/media_magic_before.XXXXXX)"
-  filebot_after="$(mktemp /tmp/media_magic_after.XXXXXX)"
+  filebot_before="$(mktemp -t media_magic_before)"
+  filebot_after="$(mktemp -t media_magic_after)"
   list_media_files > "$filebot_before"
 
   show_notification "Renaming file ${index} of ${total}: ${source_name}"
-  if ! run_and_log "filebot" "$FILEBOT" -rename "$hb_output" --db TheMovieDB --output "$OUTPUT_DIR" --action move --format "{n} ({y})"; then
+  if ! run_and_log "filebot" "$FILEBOT" -rename "$hb_output" --db TheMovieDB --output "$OUTPUT_DIR" --action move --format "$FILEBOT_FORMAT"; then
     rm -f "$filebot_before" "$filebot_after"
     show_alert "FileBot failed for ${source_name}. Check log:\n$LOG_FILE"
     return 1
@@ -277,10 +298,13 @@ process_video_file() {
       added_count=$((added_count + 1))
     done < <(comm -13 "$filebot_before" "$filebot_after")
 
-    if [[ $added_count -ge 1 && -n "${added_file:-}" ]]; then
+    if [[ $added_count -eq 1 && -n "${added_file:-}" ]]; then
       renamed_path="$added_file"
     else
-      renamed_path="$(tail -n 1 "$filebot_after")"
+      show_alert "Could not uniquely determine FileBot output for ${source_name}."
+      log_line "FileBot rename detection ambiguous for source: $source_path"
+      rm -f "$filebot_before" "$filebot_after"
+      return 1
     fi
   fi
 
@@ -322,19 +346,26 @@ end run
 APPLESCRIPT
 )" || exit 1
 
-  process_video_file "$rip_selection" 1 1 || true
+  if ! process_video_file "$rip_selection" 1 1; then
+    FAILED_ITEMS+=("$(basename "$rip_selection")")
+  fi
 elif [[ "$SOURCE_KIND" == "Disc" && "$DISC_TYPE" == "DVD" ]]; then
-  process_video_file "$DISC_PATH" 1 1 "dvd" || true
+  if ! process_video_file "$DISC_PATH" 1 1 "dvd"; then
+    FAILED_ITEMS+=("$(basename "$DISC_PATH")")
+  fi
 else
   idx=1
   for source in "${SOURCE_FILES[@]}"; do
-    process_video_file "$source" "$idx" "$TOTAL_FILES" || true
+    if ! process_video_file "$source" "$idx" "$TOTAL_FILES"; then
+      FAILED_ITEMS+=("$(basename "$source")")
+    fi
     idx=$((idx + 1))
   done
 fi
 
 ELAPSED="$(calc_elapsed)"
 TOTAL_CONVERTED=${#COMPLETED_TITLES[@]}
+TOTAL_FAILED=${#FAILED_ITEMS[@]}
 
 if [[ $TOTAL_CONVERTED -gt 0 ]]; then
   titles_text=""
@@ -345,10 +376,20 @@ else
   titles_text="(No successful outputs)"
 fi
 
+if [[ $TOTAL_FAILED -gt 0 ]]; then
+  failures_text=""
+  for f in "${FAILED_ITEMS[@]}"; do
+    failures_text+="• ${f}"$'\n'
+  done
+else
+  failures_text="(None)"
+fi
+
 log_line "Completed conversions: $TOTAL_CONVERTED"
+log_line "Failed conversions: $TOTAL_FAILED"
 log_line "Elapsed: $ELAPSED"
 log_line "Media Magic finished"
 
-show_dialog "Pipeline complete.\n\nTotal converted: ${TOTAL_CONVERTED}\n\nTitles:\n${titles_text}\nElapsed: ${ELAPSED}\n\nLog file: ${LOG_FILE}"
+show_dialog "Pipeline complete.\n\nTotal converted: ${TOTAL_CONVERTED}\nTotal failed: ${TOTAL_FAILED}\n\nTitles:\n${titles_text}\n\nFailed items:\n${failures_text}\nElapsed: ${ELAPSED}\n\nLog file: ${LOG_FILE}"
 
 exit 0
