@@ -113,8 +113,33 @@ chmod +x build.sh
 ./build.sh
 ./build.sh release
 ./build.sh release sign
-open build/MediaVault.app
+open builds/<semver>+<build_number>/MediaVault.app
 ```
+
+## Versioning And Build Numbering
+
+Media-Magic uses [Semantic Versioning 2.0.0](https://semver.org):
+
+- `VERSION` stores SemVer core: `MAJOR.MINOR.PATCH` (example: `0.1.0`).
+- `BUILD_NUMBER` stores the last successful numeric build number.
+- `build.sh` increments `BUILD_NUMBER` on each successful build.
+- Each build writes immutable artifacts into:
+  - `builds/<MAJOR.MINOR.PATCH>+<BUILD_NUMBER>/MediaVault.app`
+
+For Apple bundle metadata:
+
+- `CFBundleShortVersionString` = contents of `VERSION`
+- `CFBundleVersion` = incremented numeric `BUILD_NUMBER`
+
+Release cadence guidance:
+
+- Alpha stage baseline:
+  - Start at `0.1.0`.
+  - Keep major version `0` until explicitly moving beyond Alpha.
+- Increment `PATCH` for backward-compatible bug fixes.
+- Increment `MINOR` for backward-compatible feature additions.
+- Increment `MAJOR` for backward-incompatible changes.
+- Do not modify artifacts of an existing build ID; create a new build instead.
 
 ## Tool Resolution Model
 

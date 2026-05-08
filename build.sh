@@ -3,7 +3,7 @@
 # build.sh — Compile MediaVault.app from the Swift sources.
 #
 # Run on macOS 13+ with Xcode Command Line Tools installed (xcode-select --install).
-# Produces:  ./build/MediaVault.app
+# Produces:  ./builds/<semver>+<build_number>/MediaVault.app
 #
 # Usage:
 #   ./build.sh             # debug build
@@ -18,8 +18,11 @@ SHOULD_SIGN="${2:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCES="${SCRIPT_DIR}/Sources/MediaVault"
-BUILD_DIR="${SCRIPT_DIR}/build"
-APP="${BUILD_DIR}/MediaVault.app"
+VERSION_FILE="${SCRIPT_DIR}/VERSION"
+BUILD_NUMBER_FILE="${SCRIPT_DIR}/BUILD_NUMBER"
+BUILD_ROOT="${SCRIPT_DIR}/builds"
+
+SEMVER_CORE_REGEX='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
 
 # Sanity checks
 command -v swiftc >/dev/null 2>&1 || {
@@ -33,6 +36,32 @@ if [[ "$(uname)" != "Darwin" ]]; then
     exit 1
 fi
 
+[[ -f "$VERSION_FILE" ]] || {
+    echo "ERROR: VERSION file is missing at: $VERSION_FILE" >&2
+    exit 1
+}
+[[ -f "$BUILD_NUMBER_FILE" ]] || {
+    echo "ERROR: BUILD_NUMBER file is missing at: $BUILD_NUMBER_FILE" >&2
+    exit 1
+}
+
+MARKETING_VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
+if [[ ! "$MARKETING_VERSION" =~ $SEMVER_CORE_REGEX ]]; then
+    echo "ERROR: VERSION must be SemVer core (MAJOR.MINOR.PATCH), got: '$MARKETING_VERSION'" >&2
+    exit 1
+fi
+
+CURRENT_BUILD_NUMBER="$(tr -d '[:space:]' < "$BUILD_NUMBER_FILE")"
+if [[ ! "$CURRENT_BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: BUILD_NUMBER must be a non-negative integer, got: '$CURRENT_BUILD_NUMBER'" >&2
+    exit 1
+fi
+
+BUILD_NUMBER="$((CURRENT_BUILD_NUMBER + 1))"
+BUILD_ID="${MARKETING_VERSION}+${BUILD_NUMBER}"
+BUILD_DIR="${BUILD_ROOT}/${BUILD_ID}"
+APP="${BUILD_DIR}/MediaVault.app"
+
 # Determine build flags
 if [[ "$CONFIG" == "release" ]]; then
     SWIFT_FLAGS=("-O" "-whole-module-optimization")
@@ -43,8 +72,7 @@ fi
 # We target macOS 13+ to use modern SwiftUI APIs (.windowResizability, .bar, etc.)
 SWIFT_FLAGS+=("-target" "$(uname -m)-apple-macosx13.0")
 
-echo "▸ Cleaning build directory"
-rm -rf "$BUILD_DIR"
+echo "▸ Preparing build directory: $BUILD_DIR"
 mkdir -p "${APP}/Contents/MacOS"
 mkdir -p "${APP}/Contents/Resources"
 
@@ -56,7 +84,7 @@ swiftc "${SWIFT_FLAGS[@]}" \
 
 # Info.plist
 echo "▸ Writing Info.plist"
-cat > "${APP}/Contents/Info.plist" <<'PLIST'
+cat > "${APP}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -68,9 +96,9 @@ cat > "${APP}/Contents/Info.plist" <<'PLIST'
     <key>CFBundleIdentifier</key>
     <string>com.local.mediavault</string>
     <key>CFBundleVersion</key>
-    <string>1.0</string>
+    <string>${BUILD_NUMBER}</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>${MARKETING_VERSION}</string>
     <key>CFBundleExecutable</key>
     <string>MediaVault</string>
     <key>CFBundlePackageType</key>
@@ -103,9 +131,14 @@ if [[ "$SHOULD_SIGN" == "sign" ]]; then
     codesign --force --deep --sign - "$APP"
 fi
 
+# Persist the latest successful build number only after a successful build.
+printf '%s\n' "$BUILD_NUMBER" > "$BUILD_NUMBER_FILE"
+
 # Sanity report
 echo ""
 echo "✓ Built: $APP"
+echo "  Version: ${MARKETING_VERSION}"
+echo "  Build:   ${BUILD_NUMBER}"
 echo "  Binary: $(file "${APP}/Contents/MacOS/MediaVault" | head -1)"
 echo "  Size:   $(du -sh "$APP" | cut -f1)"
 echo ""

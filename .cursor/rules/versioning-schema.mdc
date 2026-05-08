@@ -1,0 +1,31 @@
+---
+description: Enforce SemVer build/version schema and immutable build outputs
+alwaysApply: true
+---
+
+# Media-Magic Versioning Schema
+
+- Use SemVer core in `VERSION` as `MAJOR.MINOR.PATCH` only.
+- While the project is in Alpha stage, `VERSION` must remain `0.x.y` and must
+  not use major version `1+`.
+- Keep `BUILD_NUMBER` as a non-negative integer.
+- For every successful build:
+  - Increment `BUILD_NUMBER` by exactly 1.
+  - Write artifact to `builds/<VERSION>+<BUILD_NUMBER>/MediaVault.app`.
+- Never overwrite an existing build folder for a new build.
+- `CFBundleShortVersionString` must equal `VERSION`.
+- `CFBundleVersion` must equal the incremented numeric `BUILD_NUMBER`.
+
+## Release Increment Policy
+
+- Alpha baseline:
+  - Start at `0.1.0`.
+  - Stay on `0.x.y` until project is explicitly declared production-ready.
+- Bump `PATCH` for backward-compatible bug fixes.
+- Bump `MINOR` for backward-compatible features.
+- Bump `MAJOR` for backward-incompatible changes.
+
+## Guardrails
+
+- Fail build if `VERSION` is not valid SemVer core.
+- Fail build if `BUILD_NUMBER` is not numeric.
