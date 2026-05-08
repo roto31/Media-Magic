@@ -13,6 +13,7 @@ import SwiftUI
 import AppKit
 
 struct ContentView: View {
+    @StateObject private var settings = AppSettings()
     @StateObject private var tools = ToolManager()
     @StateObject private var pipeline: PipelineController
 
@@ -22,7 +23,11 @@ struct ContentView: View {
     @State private var ripDir: URL?            // for Blu-ray intermediate
     @State private var dvdDevicePath: String = ""
     @State private var setupError: String?
-    @State private var showSummary: Bool = false
+    @State private var showSettings: Bool = false
+    @State private var skipFileBotForRun: Bool = false
+    @State private var skipSublerForRun: Bool = false
+    @State private var copyToAppleTVForRun: Bool = false
+    @State private var didApplySettingsDefaults: Bool = false
 
     init() {
         let t = ToolManager()
@@ -47,7 +52,17 @@ struct ContentView: View {
         .task {
             // First-launch tool preparation.
             do {
-                try await tools.prepare()
+                if !didApplySettingsDefaults {
+                    skipFileBotForRun = settings.defaultSkipFileBot
+                    skipSublerForRun = settings.defaultSkipSubler
+                    copyToAppleTVForRun = settings.defaultCopyToAppleTVImport
+                    didApplySettingsDefaults = true
+                }
+                let shouldForce = settings.forceFirstRunSetupOnNextLaunch
+                try await tools.prepare(forceFirstRunSetup: shouldForce)
+                if shouldForce {
+                    settings.forceFirstRunSetupOnNextLaunch = false
+                }
             } catch {
                 setupError = error.localizedDescription
             }
@@ -73,6 +88,9 @@ struct ContentView: View {
                 }
             }
         }
+        .sheet(isPresented: $showSettings) {
+            SettingsView(settings: settings)
+        }
         .overlay {
             if tools.isPreparing {
                 preparingOverlay
@@ -95,6 +113,13 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Button {
+                showSettings = true
+            } label: {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.plain)
+            .help("Settings")
             toolStatusIndicator
         }
         .padding(.horizontal, 20)
@@ -156,6 +181,8 @@ struct ContentView: View {
                 Divider()
 
                 outputDirPicker
+                Divider()
+                runOptionsSection
             }
             .padding(8)
         }
@@ -253,6 +280,25 @@ struct ContentView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
+        }
+    }
+
+    private var runOptionsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Run options")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Toggle("Skip FileBot for this run", isOn: $skipFileBotForRun)
+            Toggle("Skip Subler for this run", isOn: $skipSublerForRun)
+            Toggle("Copy completed file to Apple TV auto-import folder", isOn: $copyToAppleTVForRun)
+            Text("Defaults come from Settings and can be overridden per run.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("/Users/chris/Movies/TV/Media.localized/Automatically Add To TV.localized")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
         }
     }
 
@@ -426,8 +472,77 @@ struct ContentView: View {
             sources = ["bluray.bluray-pending::\(rd.path)"]
         }
 
-        pipeline.enqueue(sources: sources, outputDirectory: outDir)
+        let runOptions = PipelineRunOptions(
+            handBrakePreset: settings.handBrakePreset,
+            handBrakeExtraArgs: settings.args(from: settings.handBrakeExtraArgs),
+            fileBotDB: settings.fileBotDB,
+            fileBotFormat: settings.fileBotFormat,
+            fileBotExtraArgs: settings.args(from: settings.fileBotExtraArgs),
+            sublerExtraArgs: settings.args(from: settings.sublerExtraArgs),
+            skipFileBot: skipFileBotForRun,
+            skipSubler: skipSublerForRun,
+            copyToAppleTVImport: copyToAppleTVForRun
+        )
+        pipeline.enqueue(sources: sources, outputDirectory: outDir, options: runOptions)
         await pipeline.run()
+    }
+}
+
+private struct SettingsView: View {
+    @ObservedObject var settings: AppSettings
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Settings")
+                .font(.title2)
+                .fontWeight(.semibold)
+
+            GroupBox("HandBrake") {
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("Preset", text: $settings.handBrakePreset)
+                    TextField("Extra args (space-separated)", text: $settings.handBrakeExtraArgs)
+                        .textFieldStyle(.roundedBorder)
+                }
+                .padding(8)
+            }
+
+            GroupBox("FileBot") {
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("Database", text: $settings.fileBotDB)
+                    TextField("Format", text: $settings.fileBotFormat)
+                    TextField("Extra args (space-separated)", text: $settings.fileBotExtraArgs)
+                        .textFieldStyle(.roundedBorder)
+                }
+                .padding(8)
+            }
+
+            GroupBox("Subler") {
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("Extra args (space-separated)", text: $settings.sublerExtraArgs)
+                        .textFieldStyle(.roundedBorder)
+                }
+                .padding(8)
+            }
+
+            GroupBox("Defaults") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Default: Skip FileBot", isOn: $settings.defaultSkipFileBot)
+                    Toggle("Default: Skip Subler", isOn: $settings.defaultSkipSubler)
+                    Toggle("Default: Copy completed file to Apple TV auto-import folder", isOn: $settings.defaultCopyToAppleTVImport)
+                    Toggle("Force first-run setup on next launch (re-download HandBrakeCLI)", isOn: $settings.forceFirstRunSetupOnNextLaunch)
+                }
+                .padding(8)
+            }
+
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 640)
     }
 }
 

@@ -86,6 +86,34 @@ sequenceDiagram
     PC-->>UI: summary + log path
 ```
 
+## Settings And Run Overrides
+
+The app now includes a Settings panel (`gear` button in header) with persistent
+defaults, plus per-run overrides in the main Source card.
+
+- Settings defaults (persisted in `UserDefaults`):
+  - HandBrake preset + extra args
+  - FileBot DB/format + extra args
+  - Subler extra args
+  - Default skip FileBot/Subler toggles
+  - Default copy-to-Apple-TV auto-import toggle
+  - Force first-run setup on next launch (re-download managed HandBrakeCLI)
+- Main-window run options (override defaults for current run):
+  - Skip FileBot
+  - Skip Subler
+  - Copy output to Apple TV auto-import folder:
+    - `/Users/chris/Movies/TV/Media.localized/Automatically Add To TV.localized`
+
+```mermaid
+flowchart TD
+    SettingsDefaults["Saved Settings defaults"] --> MainRun["Main window run options"]
+    MainRun --> PipelineOptions["PipelineRunOptions"]
+    PipelineOptions --> HBArgs["HandBrake configured args"]
+    PipelineOptions --> FBArgs["FileBot configured args or skip"]
+    PipelineOptions --> SublerArgs["Subler configured args or skip"]
+    PipelineOptions --> AppleTVCopy["Optional copy to Apple TV import folder"]
+```
+
 ## Error Handling And Continuation
 
 ```mermaid
@@ -112,9 +140,44 @@ Commands:
 chmod +x build.sh
 ./build.sh
 ./build.sh release
+# optional compatibility alias:
 ./build.sh release sign
 open builds/<semver>+<build_number>/MediaVault.app
 ```
+
+## Build And Release Process
+
+Release builds are now **signed-only GitHub distribution** builds:
+
+- Build output is created under `builds/<VERSION>+<BUILD_NUMBER>/MediaVault.app`
+- App is signed with Developer ID Application identity
+- App is zipped as `MediaVault-<VERSION>+<BUILD_NUMBER>-macOS.zip`
+- GitHub Release is created/updated for tag `<VERSION>+<BUILD_NUMBER>`
+- Release asset is uploaded automatically (`gh release upload --clobber`)
+
+```mermaid
+flowchart TD
+    StartBuild["./build.sh release"] --> Validate["Validate VERSION + BUILD_NUMBER"]
+    Validate --> Compile["Compile Swift binary"]
+    Compile --> WritePlist["Write Info.plist (CFBundle versions)"]
+    WritePlist --> SignApp["Sign app (Developer ID Application)"]
+    SignApp --> VerifySign["Verify codesign integrity"]
+    VerifySign --> Package["Zip app artifact"]
+    Package --> EnsureGh["Validate gh auth + git repo context"]
+    EnsureGh --> ReleaseExists{"GitHub release exists?"}
+    ReleaseExists -->|"No"| CreateRelease["Create release/tag notes"]
+    ReleaseExists -->|"Yes"| EditRelease["Update release notes"]
+    CreateRelease --> UploadAsset["Upload zip asset (--clobber)"]
+    EditRelease --> UploadAsset
+    UploadAsset --> DoneBuild["Release build complete"]
+```
+
+Distribution note:
+- This mode is signed but **not notarized**.
+- Some machines may still require first-open allowance (right-click Open), or:
+  - `xattr -dr com.apple.quarantine MediaVault.app`
+
+Detailed build documentation: `docs/BUILD_PROCESS.md`
 
 ## Versioning And Build Numbering
 
@@ -140,6 +203,8 @@ Release cadence guidance:
 - Increment `MINOR` for backward-compatible feature additions.
 - Increment `MAJOR` for backward-incompatible changes.
 - Do not modify artifacts of an existing build ID; create a new build instead.
+- Every successful `release` build must upload its zipped artifact to GitHub
+  Releases for the matching build tag.
 
 ## Tool Resolution Model
 

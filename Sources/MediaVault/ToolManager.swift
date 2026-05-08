@@ -63,11 +63,14 @@ final class ToolManager: ObservableObject {
 
     /// Locate or download all required tools. Throws if a *user-installed*
     /// tool (MakeMKV / FileBot) is missing — those we can't auto-fetch.
-    func prepare() async throws {
+    func prepare(forceFirstRunSetup: Bool = false) async throws {
         isPreparing = true
         defer { isPreparing = false }
 
         try ensureSupportDirectoryExists()
+        if forceFirstRunSetup {
+            try resetManagedToolBinariesForFirstRun()
+        }
 
         // 1. Auto-managed tools (HandBrakeCLI, SublerCli)
         handbrakeCLI = try await ensureHandBrakeCLI()
@@ -120,6 +123,13 @@ final class ToolManager: ObservableObject {
             at: Self.binDir,
             withIntermediateDirectories: true
         )
+    }
+
+    private func resetManagedToolBinariesForFirstRun() throws {
+        let managedHandBrake = Self.binDir.appendingPathComponent("HandBrakeCLI")
+        if FileManager.default.fileExists(atPath: managedHandBrake.path) {
+            try FileManager.default.removeItem(at: managedHandBrake)
+        }
     }
 
     // MARK: - HandBrakeCLI

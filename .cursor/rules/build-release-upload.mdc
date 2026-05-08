@@ -1,0 +1,16 @@
+---
+description: Require release builds to package and upload artifacts to GitHub Releases
+alwaysApply: true
+---
+
+# Media-Magic Release Upload Rule
+
+- Every completed `release` build must produce a zipped `.app` artifact.
+- Every completed `release` build must upload that artifact to a GitHub Release
+  tagged with the build ID (`<VERSION>+<BUILD_NUMBER>`).
+- If upload preconditions are missing (e.g., unauthenticated `gh`), fail the
+  release build rather than silently skipping upload.
+- Use `gh release create` when release tag is missing; otherwise use
+  `gh release upload --clobber` to update the artifact.
+- Keep artifact naming deterministic:
+  - `MediaVault-<VERSION>+<BUILD_NUMBER>-macOS.zip`

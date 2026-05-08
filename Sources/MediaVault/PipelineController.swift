@@ -68,6 +68,18 @@ struct PipelineSummary {
     }
 }
 
+struct PipelineRunOptions {
+    let handBrakePreset: String
+    let handBrakeExtraArgs: [String]
+    let fileBotDB: String
+    let fileBotFormat: String
+    let fileBotExtraArgs: [String]
+    let sublerExtraArgs: [String]
+    let skipFileBot: Bool
+    let skipSubler: Bool
+    let copyToAppleTVImport: Bool
+}
+
 // MARK: - Controller
 
 @MainActor
@@ -81,6 +93,18 @@ final class PipelineController: ObservableObject {
     private let tools: ToolManager
     private var logHandle: FileHandle?
     private var logURL: URL?
+    private var runOptions = PipelineRunOptions(
+        handBrakePreset: "Apple 2160p60 4K HEVC Surround",
+        handBrakeExtraArgs: [],
+        fileBotDB: "TheMovieDB",
+        fileBotFormat: "{n} ({y})",
+        fileBotExtraArgs: ["-non-strict", "--action", "move", "--conflict", "auto"],
+        sublerExtraArgs: [],
+        skipFileBot: false,
+        skipSubler: false,
+        copyToAppleTVImport: false
+    )
+    private let appleTVAutoImportPath = "/Users/chris/Movies/TV/Media.localized/Automatically Add To TV.localized"
 
     init(tools: ToolManager) {
         self.tools = tools
@@ -88,7 +112,7 @@ final class PipelineController: ObservableObject {
 
     // MARK: - Public API
 
-    func enqueue(sources: [String], outputDirectory: URL) {
+    func enqueue(sources: [String], outputDirectory: URL, options: PipelineRunOptions) {
         // Reset state for a new run.
         items = sources.map {
             let name: String
@@ -102,6 +126,7 @@ final class PipelineController: ObservableObject {
         currentIndex = 0
         summary = nil
         outputDir = outputDirectory
+        runOptions = options
     }
 
     private var outputDir: URL = FileManager.default.homeDirectoryForCurrentUser
@@ -195,7 +220,10 @@ final class PipelineController: ObservableObject {
         // Stage 3: FileBot
         items[index].stage = .renaming
         items[index].stageProgress = 0
-        if tools.hasFileBot {
+        if runOptions.skipFileBot {
+            items[index].stageNote = "Skipped by run option"
+            log("FileBot skipped by run option")
+        } else if tools.hasFileBot {
             let renamed = try await runFileBot(input: outFile, item: index)
             items[index].finalPath = renamed
         } else {
@@ -206,7 +234,20 @@ final class PipelineController: ObservableObject {
         // Stage 4: SublerCli
         items[index].stage = .tagging
         items[index].stageProgress = 0
-        try await runSublerCli(input: items[index].finalPath ?? outFile, item: index)
+        if runOptions.skipSubler {
+            items[index].stageNote = "Skipped by run option"
+            log("Subler skipped by run option")
+        } else {
+            try await runSublerCli(input: items[index].finalPath ?? outFile, item: index)
+        }
+
+        if runOptions.copyToAppleTVImport {
+            items[index].stageNote = "Copying to Apple TV auto-import folder…"
+            let source = items[index].finalPath ?? outFile
+            let copiedPath = try copyToAppleTVAutoImport(sourcePath: source)
+            items[index].finalPath = copiedPath
+            log("Copied to Apple TV auto-import: \(copiedPath)")
+        }
     }
 
     // MARK: - Stage runners
@@ -287,15 +328,16 @@ final class PipelineController: ObservableObject {
             "-i", source,
             "-o", outFile,
             "--preset-import-gui",
-            "--preset", "Apple 2160p60 4K HEVC Surround",
+            "--preset", runOptions.handBrakePreset,
             "-v", "1",
         ]
+        let mergedArgs = args + runOptions.handBrakeExtraArgs
 
         items[item].stageNote = "Transcoding to Apple 4K HEVC…"
 
         try await runProcess(
             launch: bin,
-            args: args,
+            args: mergedArgs,
             stage: .encoding,
             item: item,
             parseLine: { line in
@@ -331,12 +373,10 @@ final class PipelineController: ObservableObject {
         //         --action move --conflict auto
         let args = [
             "-rename", input,
-            "--db", "TheMovieDB",
-            "--format", "{n} ({y})",
-            "-non-strict",
-            "--action", "move",
-            "--conflict", "auto",
+            "--db", runOptions.fileBotDB,
+            "--format", runOptions.fileBotFormat,
         ]
+        let mergedArgs = args + runOptions.fileBotExtraArgs
 
         items[item].stageNote = "Looking up title on TheMovieDB…"
         let runStart = Date()
@@ -345,7 +385,7 @@ final class PipelineController: ObservableObject {
 
         try await runProcess(
             launch: bin,
-            args: args,
+            args: mergedArgs,
             stage: .renaming,
             item: item,
             parseLine: { _ in nil } // FileBot doesn't emit numeric progress
@@ -386,7 +426,7 @@ final class PipelineController: ObservableObject {
         // SublerCli -source <file> -optimize
         // Uses the filename to search TheMovieDB / iTunes, writing metadata
         // and cover art into the .m4v atoms in place.
-        let args = ["-source", input, "-optimize"]
+        let args = ["-source", input, "-optimize"] + runOptions.sublerExtraArgs
 
         items[item].stageNote = "Fetching cover art and metadata…"
 
@@ -397,6 +437,27 @@ final class PipelineController: ObservableObject {
             item: item,
             parseLine: { _ in nil }
         )
+    }
+
+    private func copyToAppleTVAutoImport(sourcePath: String) throws -> String {
+        let fm = FileManager.default
+        let destinationDir = URL(fileURLWithPath: appleTVAutoImportPath, isDirectory: true)
+        try fm.createDirectory(at: destinationDir, withIntermediateDirectories: true)
+
+        let sourceURL = URL(fileURLWithPath: sourcePath)
+        var destinationURL = destinationDir.appendingPathComponent(sourceURL.lastPathComponent)
+        if fm.fileExists(atPath: destinationURL.path) {
+            let base = sourceURL.deletingPathExtension().lastPathComponent
+            let ext = sourceURL.pathExtension
+            var idx = 1
+            repeat {
+                let name = "\(base)_\(idx)"
+                destinationURL = destinationDir.appendingPathComponent(name).appendingPathExtension(ext)
+                idx += 1
+            } while fm.fileExists(atPath: destinationURL.path)
+        }
+        try fm.copyItem(at: sourceURL, to: destinationURL)
+        return destinationURL.path
     }
 
     // MARK: - Generic process runner with line-streaming

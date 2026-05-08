@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>MediaVault</string>
+    <key>CFBundleDisplayName</key>
+    <string>MediaVault</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.local.mediavault</string>
+    <key>CFBundleVersion</key>
+    <string>5</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleExecutable</key>
+    <string>MediaVault</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>LSUIElement</key>
+    <false/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>MediaVault — local-only video conversion orchestrator.</string>
+    <!-- App calls user-installed CLI tools and downloads HandBrake/Subler
+         CLIs into ~/Library/Application Support. No network entitlements
+         beyond outbound HTTPS are required. -->
+</dict>
+</plist>
