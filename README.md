@@ -1,107 +1,158 @@
-# MediaVault — Native Swift macOS App
+# Media-Magic
 
-A real native macOS application that orchestrates the four-stage video
-conversion pipeline (MakeMKV → HandBrake → FileBot → SublerCli) with a
-SwiftUI interface and live progress tracking.
+Media-Magic is a native macOS SwiftUI app (`MediaVault`) that orchestrates a
+multi-stage conversion pipeline for movie/disc workflows:
 
-```
+- MakeMKV (Blu-ray only)
+- HandBrakeCLI (transcode)
+- FileBot (rename)
+- SublerCli (metadata optimization)
+
+The repository also includes a legacy shell + AppleScript pipeline as a
+fallback path.
+
+## Repository Layout
+
+```text
 Sources/MediaVault/
-├── MediaVaultApp.swift      ← @main app entry, window scene
-├── ContentView.swift        ← SwiftUI UI: setup card, queue, summary sheet
-├── PipelineController.swift ← state machine, process orchestration, log
-└── ToolManager.swift        ← tool discovery, on-demand HandBrakeCLI download
-
-build.sh                     ← compiles to ./build/MediaVault.app
+  MediaVaultApp.swift
+  ContentView.swift
+  PipelineController.swift
+  ToolManager.swift
+build.sh
+MediaConversionPipeline.sh
+LaunchMediaPipeline.applescript
 ```
 
-## What it does differently from the bash version
+## Architecture
 
-- **Compiled native binary.** No interpreter; one Mach-O executable inside the
-  .app bundle. Boots in ~100ms.
-- **Live HandBrake progress bar.** Parses `Encoding: ... 12.34 %` output in real
-  time and drives an `NSProgressIndicator`. Same for MakeMKV's `PRGV:` lines.
-- **Real `NSOpenPanel` and `UNUserNotificationCenter`** — not osascript
-  modal dialogs. The window stays interactive throughout.
-- **First-launch tool fetching.** On first run, downloads HandBrakeCLI from the
-  official GitHub release into `~/Library/Application Support/MediaVault/bin/`.
-  No Homebrew required for that one tool. SublerCli, MakeMKV, and FileBot are
-  located if installed; the app explains how to install whichever one is
-  missing.
-- **Per-item error recovery.** A failure on item 2 of 5 logs the error and
-  continues with items 3–5; the summary sheet at the end separates successes
-  from failures.
+```mermaid
+flowchart TD
+    User["User"] --> UI["SwiftUI ContentView"]
+    UI --> Controller["PipelineController"]
+    UI --> Tools["ToolManager"]
+    Tools --> HB["HandBrakeCLI"]
+    Tools --> Subler["SublerCli"]
+    Tools --> MKV["MakeMKV (optional)"]
+    Tools --> FB["FileBot (optional)"]
+    Controller --> Proc["Process runner + output streaming"]
+    Proc --> Log["conversion_log_YYYY-MM-DD_HH-MM-SS.txt"]
+    Proc --> Notify["UNUserNotificationCenter"]
+    Controller --> Summary["Run summary (success/failure)"]
+```
 
-## Why HandBrakeCLI is downloaded but the others aren't
+## End-To-End Pipeline Flow
 
-HandBrakeCLI ships an official `.dmg` at predictable URLs on GitHub
-(`https://github.com/HandBrake/HandBrake/releases/download/<version>/HandBrakeCLI-<version>.dmg`),
-which makes auto-fetch trivially safe. SublerCli's distribution lives on
-Bitbucket and has no stable redistribution URL pattern across versions, so the
-app surfaces a clear install instruction instead. MakeMKV requires a license key
-from MakeMKV.com; FileBot has its own paid licensing model. Auto-downloading
-either of those would be impolite at best and a license violation at worst.
+```mermaid
+flowchart TD
+    Start["Start conversion"] --> SourceType{"Source type"}
+    SourceType -->|"Video File"| HB
+    SourceType -->|"DVD (/dev/diskN)"| HB
+    SourceType -->|"Blu-ray"| MKV
+    MKV["MakeMKV rip (largest MKV selected)"] --> HB["HandBrakeCLI transcode (.m4v)"]
+    HB --> FileBotCheck{"FileBot available?"}
+    FileBotCheck -->|"Yes"| FB["FileBot rename"]
+    FileBotCheck -->|"No"| SkipFB["Skip rename"]
+    FB --> Subler["SublerCli optimize metadata"]
+    SkipFB --> Subler
+    Subler --> Done["Item complete"]
+```
 
-## Build
+## Tool Orchestration Sequence
 
-Requires macOS 13+ and Xcode Command Line Tools (`xcode-select --install`).
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as ContentView
+    participant TM as ToolManager
+    participant PC as PipelineController
+    participant CLI as ExternalCLI
+
+    User->>UI: Launch app
+    UI->>TM: prepare()
+    TM->>TM: Resolve/download tools
+    User->>UI: Choose sources + output and press Convert
+    UI->>PC: enqueue(...), run()
+    loop per item
+        PC->>CLI: MakeMKV (Blu-ray only)
+        CLI-->>PC: streamed output
+        PC->>CLI: HandBrakeCLI
+        CLI-->>PC: streamed output with progress
+        PC->>CLI: FileBot (if available)
+        CLI-->>PC: rename output
+        PC->>CLI: SublerCli
+        CLI-->>PC: completion
+    end
+    PC-->>UI: summary + log path
+```
+
+## Error Handling And Continuation
+
+```mermaid
+flowchart TD
+    ItemStart["Process item"] --> StageRun["Run next stage"]
+    StageRun --> Ok{"Stage success?"}
+    Ok -->|"Yes"| NextStage{"More stages?"}
+    NextStage -->|"Yes"| StageRun
+    NextStage -->|"No"| ItemSuccess["Mark item complete"]
+    Ok -->|"No"| ItemFail["Mark item failed + show alert"]
+    ItemFail --> Continue["Continue with next item"]
+    ItemSuccess --> Continue
+```
+
+## Build And Run
+
+Requirements:
+- macOS 13+
+- Xcode Command Line Tools (`xcode-select --install`)
+
+Commands:
 
 ```bash
 chmod +x build.sh
-./build.sh release           # compiles ./build/MediaVault.app
-open build/MediaVault.app    # or: cp -R build/MediaVault.app /Applications/
+./build.sh
+./build.sh release
+./build.sh release sign
+open build/MediaVault.app
 ```
 
-For a debug build with symbols: `./build.sh` (no args).
-For ad-hoc codesigning: `./build.sh release sign`.
+## Tool Resolution Model
 
-The resulting `.app` is ~1 MB. On first launch it fetches HandBrakeCLI
-(~25 MB) into Application Support; every subsequent launch is instant.
+- `HandBrakeCLI`:
+  - Uses existing system install if present.
+  - Otherwise downloads pinned release DMG and installs binary into
+    `~/Library/Application Support/MediaVault/bin/`.
+- `SublerCli`:
+  - Resolved from common paths; if missing, app prompts install guidance.
+- `MakeMKV`:
+  - Required only for Blu-ray.
+- `FileBot`:
+  - Optional; rename stage is skipped if absent.
 
-## Required user-installed tools
+## CLI Stage Commands
 
-Auto-downloaded on first launch — nothing needed:
-- HandBrakeCLI
-
-Looked up on standard paths; install separately:
-- **MakeMKV** — `brew install --cask makemkv`  (needed for Blu-ray only)
-- **FileBot** — `brew install --cask filebot`   (rename stage; pipeline still runs without it, just skips rename)
-- **SublerCli** — `brew install --cask sublercli`
-
-If anything's missing, the tooltip on the green/orange status indicator in the
-top-right of the window shows exactly which tools were resolved and where.
-
-## Pipeline flow
-
-1. **Setup card** — pick source type (Video File / DVD / Blu-ray), source
-   path(s), and output directory. For Blu-ray, also pick a working folder for
-   the MakeMKV intermediate.
-2. **Click Convert.** Each item flows through the stages it needs:
-   - `Blu-ray` → MakeMKV rip → HandBrake → FileBot → Subler
-   - `DVD` → HandBrake (reads `/dev/disk*` directly) → FileBot → Subler
-   - `Video File` → HandBrake → FileBot → Subler
-3. **Live queue** — each item shows its current stage with a colored progress
-   bar. Stage colors: purple (rip), blue (encode), orange (rename), green (tag).
-4. **Summary sheet** appears when the run completes, listing converted titles,
-   per-item elapsed time, total elapsed time, failures (if any), and a button
-   to reveal the log file in Finder.
-
-## CLI invocations (verified syntax)
-
-| Stage | Command |
+| Stage | Command pattern |
 |---|---|
 | MakeMKV | `makemkvcon -r --minlength=3600 --progress=-stderr mkv disc:0 all <folder>` |
-| HandBrake | `HandBrakeCLI -i <src> -o <out>.m4v --preset-import-gui --preset "Apple 2160p60 4K HEVC Surround" -v 1` |
+| HandBrakeCLI | `HandBrakeCLI -i <src> -o <out>.m4v --preset-import-gui --preset "Apple 2160p60 4K HEVC Surround" -v 1` |
 | FileBot | `filebot -rename <file> --db TheMovieDB --format "{n} ({y})" -non-strict --action move --conflict auto` |
 | SublerCli | `SublerCli -source <file> -optimize` |
 
-References:
-- [HandBrake CLI options](https://handbrake.fr/docs/en/latest/cli/cli-options.html)
-- [MakeMKV CLI usage](https://www.makemkv.com/developers/usage.txt)
-- [FileBot CLI](https://www.filebot.net/cli.html)
-- [Subler GitHub](https://github.com/SublerApp/Subler)
+## Logs And Outputs
 
-## Logs
+- A run log is written to output directory:
+  - `conversion_log_YYYY-MM-DD_HH-MM-SS.txt`
+- The UI summary reports:
+  - total items
+  - succeeded/failed items
+  - elapsed times
+  - log file location
 
-Every run writes `conversion_log_YYYY-MM-DD_HH-MM-SS.txt` into the chosen
-output directory. Every CLI invocation, full stdout/stderr line-by-line, and
-timestamps land in there. The summary sheet has a "reveal in Finder" button.
+## Legacy Pipeline
+
+Legacy scripts remain available:
+- `MediaConversionPipeline.sh`
+- `LaunchMediaPipeline.applescript`
+
+Use this path if you prefer shell-driven dialogs or need to run without the
+SwiftUI app.
