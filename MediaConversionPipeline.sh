@@ -39,7 +39,6 @@ set -u
 IFS=$'\n\t'
 
 readonly HANDBRAKE_PRESET='Apple 2160p60 4K HEVC Surround'
-readonly HANDBRAKE_PRESET_DOC='https://handbrake.fr/docs/en/latest/technical/official-presets.html'
 
 # Minimum wait after triggering Subler metadata fetch before save (async API in Subler.app).
 : "${SUBLER_METADATA_WAIT:=90}"
@@ -93,6 +92,8 @@ resolve_first() {
   return 1
 }
 
+# --- Structural · Facade (decision tree: structure → simplify complex subsystem) ---
+# Single entry aggregates path lookup for MakemKV / HandBrake / FileBot / Subler binaries.
 init_tool_paths() {
   MAKEMKVCON=$(resolve_first \
     "/Applications/MakeMKV.app/Contents/MacOS/makemkvcon" \
@@ -243,12 +244,24 @@ sanitize_basename() {
   printf '%s' "$n"
 }
 
+# --- Behavioural · Chain of responsibility (decision tree: behaviour → algorithms tried in sequence) ---
+# Try default preset invocation first; delegate to preset-import fallback on failure.
+_try_handbrake_encode() {
+  local src="$1"
+  local dest="$2"
+  if "$HANDBRAKECLI" -i "$src" -o "$dest" --preset "$HANDBRAKE_PRESET" >>"$LOG_FILE" 2>&1; then
+    return 0
+  fi
+  log_line "HandBrakeCLI: retry with --preset-import-gui."
+  "$HANDBRAKECLI" --preset-import-gui -i "$src" -o "$dest" --preset "$HANDBRAKE_PRESET" >>"$LOG_FILE" 2>&1
+}
+
 run_handbrake_one() {
   local src="$1"
   local outdir="$2"
   local idx="$3"
   local total="$4"
-  local base dest tmpout
+  local base dest
   base=$(basename "$src")
   base=${base%.*}
   base=$(sanitize_basename "$base")
@@ -259,13 +272,8 @@ run_handbrake_one() {
   notify_user "HandBrake" "Converting file ${idx} of ${total}…"
   log_line "HandBrakeCLI: source=$src output=$dest preset=$HANDBRAKE_PRESET"
 
-  # Primary invocation: --preset (HandBrake CLI options guide).
-  if "$HANDBRAKECLI" -i "$src" -o "$dest" --preset "$HANDBRAKE_PRESET" >>"$LOG_FILE" 2>&1; then
-    printf '%s\n' "$dest"
-    return 0
-  fi
-  log_line "HandBrakeCLI: first attempt failed; retrying with --preset-import-gui (HandBrake 1.3+ preset discovery)."
-  if "$HANDBRAKECLI" --preset-import-gui -i "$src" -o "$dest" --preset "$HANDBRAKE_PRESET" >>"$LOG_FILE" 2>&1; then
+  # HandBrake CLI: https://handbrake.fr/docs/en/latest/cli/cli-options.html (--preset).
+  if _try_handbrake_encode "$src" "$dest"; then
     printf '%s\n' "$dest"
     return 0
   fi
@@ -365,6 +373,29 @@ run_subler_stage() {
   return "$st"
 }
 
+# --- Behavioural · Strategy (implicit): each prompt_source_flow branch emits a typed token;
+# decoding is consolidated here instead of branching in main().
+populate_sources_from_flow() {
+  local flow=$1
+  SOURCES=()
+  case "$flow" in
+  DVD$'\t'*)
+    SOURCES+=("${flow#*$'\t'}")
+    ;;
+  FILES$'\n'*)
+    local body=${flow#*$'\n'}
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && SOURCES+=("$line")
+    done <<<"$body"
+    ;;
+  *)
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && SOURCES+=("$line")
+    done <<<"$flow"
+    ;;
+  esac
+}
+
 main() {
   if [[ "$(uname -s)" != "Darwin" ]]; then
     printf 'This script must run on macOS.\n' >&2
@@ -402,19 +433,7 @@ main() {
   log_line "=== Pipeline session start ==="
 
   declare -a SOURCES=()
-  if [[ "$flow" == DVD$'\t'* ]]; then
-    SOURCES+=("${flow#*$'\t'}")
-  elif [[ "$flow" == FILES$'\n'* ]]; then
-    local body
-    body=${flow#*$'\n'}
-    while IFS= read -r line; do
-      [[ -n "$line" ]] && SOURCES+=("$line")
-    done <<<"$body"
-  else
-    while IFS= read -r line; do
-      [[ -n "$line" ]] && SOURCES+=("$line")
-    done <<<"$flow"
-  fi
+  populate_sources_from_flow "$flow"
 
   if ((${#SOURCES[@]} == 0)); then
     dialog_error "No source files were selected or produced."

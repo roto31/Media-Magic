@@ -1,0 +1,43 @@
+---
+description: Decision-tree constraints for Gang-of-Four style patterns before any refactor suggestion (React/Next.js frontend, Python FastAPI backend).
+globs:
+  - "**/*.tsx"
+  - "**/*.ts"
+  - "**/app/**/*"
+  - "**/pages/**/*"
+  - "**/components/**/*"
+  - "**/*.py"
+  - "**/api/**/*"
+alwaysApply: false
+---
+
+# Design pattern gate (creation → structure → behaviour)
+
+Before suggesting, adding, or naming a Gang-of-Four–style pattern, **stop and classify the pain**:
+
+1. **Creation** — complex constructors; many optional params; scattered `new`/factory calls; unclear defaults.
+2. **Structure** — awkward boundaries; leaking infra types into UI/domain; callers reach through many steps to one subsystem.
+3. **Behaviour** — growing conditionals keyed by variant; algorithms or policies swapped at runtime; repeated “large switch/case chains.”
+
+Until the pain fits one branch, **do not pick a named pattern.** State the pain in plain language first.
+
+---
+
+## Enforcement
+
+- **Pain point first**: If you cannot phrase a concrete symptom (duplicate logic, brittle boundary, exploding `if`), do not retrofit a pattern.
+- **Branch trace**: When you propose a pattern, cite the branch (e.g. “Behaviour → switch algorithms → Strategy”), not vibes.
+- **No orphan patterns**: Reject Singleton for “easy global access,” Decorator stacks with cross-dependent wrappers, Factory “because OOP.”
+- **Adapters**: Only boundary translation — **no domain rules.** Keep DTO/request mapping thin; behaviour stays in domain/services.
+- **Builders (Python/React)**: Validate required fields early; avoid half-built objects escaping construction.
+- **Strategies**: Replace branching with injectable/alternate implementations (Python protocol + registry; React hooks or polymorphic props where appropriate — **prefer composition over decorator chains for UI).**
+- **State**: Only when modes and transitions are explicit and finite; pair with typed state machines or enums, not ambiguous booleans.
+
+---
+
+## Stack idioms
+
+- **Next.js/React**: Preserve Server/Client boundaries; adapters at data-fetch/service modules; behavioural variation via hooks, strategy components, or small context providers — not duplicated page logic.
+- **FastAPI**: Routers orchestrate only; adapters at schema↔domain edges; behavioural variation in services/protocols injected via `Depends()`, not gigantic route handlers.
+
+If the codebase file set does not match this stack yet, apply the same branching logic anyway and refuse speculative scaffolding.
