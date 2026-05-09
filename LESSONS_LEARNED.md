@@ -30,3 +30,4 @@ Short-lived notes from reviews and refactors. Prefer concrete “do / don’t”
 ### References
 
 - Skill summary: `.cursor/skills/design-pattern-decision-tree/SKILL.md`
+- End-user and maintainer docs: `docs/` (see `docs/README.md`)
