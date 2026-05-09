@@ -1,0 +1,41 @@
+---
+description: Enforces shell pipeline structure (Facade, encode chain, source-flow decoder) for MediaConversionPipeline.sh and related bash orchestration.
+globs:
+  - "**/*.sh"
+  - "MediaConversionPipeline.sh"
+alwaysApply: false
+---
+
+# Media pipeline bash — enforced conventions
+
+Apply these whenever adding or editing `MediaConversionPipeline.sh` or sibling orchestration shells in this repo. They codify refactor decisions from design-pattern review (structure + behaviour branches).
+
+---
+
+## 1 · Tool discovery — Structural Facade
+
+- **Single entry**: Keep all resolving of `makemkvcon`, `HandBrakeCLI`, `FileBot`, Subler binaries in **one function** (`init_tool_paths` or a renamed equivalent). Callers must not scatter `resolve_first`/path literals for these tools elsewhere.
+- **Do not regress** into ad hoc `which`/`test` chains per stage; extend the façade by adding paths to that function’s lookup lists only.
+
+---
+
+## 2 · HandBrake (and similar “try policy A, then B”) — Chain of responsibility
+
+- **Encoding attempts** that have a primary path and a fallback (e.g. plain `--preset` then `--preset-import-gui`) must live in a **dedicated helper** (e.g. `_try_handbrake_encode`) that returns success/failure for the whole chain.
+- **Forbidden**: duplicating `if HandBrake …; then … fi` blocks inside `run_handbrake_one` (or equivalent) for each attempt; the outer function should call the chain helper once and handle a single pass/fail result.
+- New encode policies = **new step in the chain** (or a clearly ordered sub-call), not parallel unrelated conditionals.
+
+---
+
+## 3 · Source acquisition tokens — Strategy-style decoding
+
+- Output of `prompt_source_flow` (or similar) uses **typed prefixes**: e.g. `DVD<TAB>…`, `FILES<NL>…`, or plain multiline paths.
+- **Single decoder**: Populate `SOURCES` only through **one function** (e.g. `populate_sources_from_flow`) using `case`/`match` on those prefixes.
+- **Forbidden**: `if flow == DVD… elif flow == FILES… else` blocks in `main`; add new source kinds by extending the decoder, not by branching in the runner.
+
+---
+
+## 4 · General
+
+- Preserve **bash 3.2 compatibility** on macOS (no `declare -n` / namerefs unless the project explicitly drops default `/bin/bash`).
+- Keep **design-pattern decision tree** alignment: if a change adds creation/structure/behaviour complexity, cross-check `.cursor/rules/design-pattern-decision-tree.mdc` before introducing new abstractions.
