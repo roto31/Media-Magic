@@ -1,6 +1,6 @@
-# Cursor AI and repository conventions
+# Cursor AI and repository conventions (Media Magic)
 
-This repository ships **Cursor rules** and a **skill** so assistants align with the same standards as human maintainers.
+This repository ships **Cursor rules** and a **skill** so assistants align with the same standards as human maintainers for the **Media Magic** automation project.
 
 ## Files under `.cursor/`
 

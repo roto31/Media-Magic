@@ -1,8 +1,8 @@
-# Media conversion pipeline — user guide
+# Media Magic — user guide
 
 ## What it does
 
-`MediaConversionPipeline.sh` guides you through:
+**Media Magic** (`MediaConversionPipeline.sh`) guides you through:
 
 1. **Source** — Video files (multi-select), DVD folder (`VIDEO_TS`), or Blu-ray rip via **MakeMKV**.
 2. **Output folder** — HandBrake output, FileBot rename target, Subler processing, and **log file** location.
@@ -70,10 +70,10 @@ MakeMKV output may be **prepended** from a temporary log if ripping ran before y
 2. Compile:
 
    ```bash
-   osacompile -o "Media Pipeline.app" LaunchMediaPipeline.applescript
+   osacompile -o "Media Magic.app" LaunchMediaPipeline.applescript
    ```
 
-3. Double-click **Media Pipeline.app** to run.
+3. Double-click **Media Magic.app** to run.
 
 The script itself performs all dialogs; the launcher only provides a visible transcript.
 

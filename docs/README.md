@@ -1,4 +1,4 @@
-# Documentation index
+# Media Magic — documentation index
 
 - **[pipeline-user-guide.md](pipeline-user-guide.md)** — Installation, running the pipeline, launcher app, logs, environment variables, known limitations.
 - **[pipeline-developer-reference.md](pipeline-developer-reference.md)** — Pipeline stages, design conventions (Facade, encode chain, source-flow decoder), extending the script.

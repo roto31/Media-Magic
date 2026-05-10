@@ -1,6 +1,6 @@
 (*
   Double-clickable launcher (optional): compile to an application with:
-    osacompile -o "Media Pipeline.app" LaunchMediaPipeline.applescript
+    osacompile -o "Media Magic.app" LaunchMediaPipeline.applescript
 
   Before compiling, set pipelineScript below to the absolute path of
   MediaConversionPipeline.sh on your Mac Studio.

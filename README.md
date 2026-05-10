@@ -1,6 +1,6 @@
-# Media-Magic
+# Media Magic
 
-macOS automation that rips or reads media, converts with **HandBrakeCLI**, renames with **FileBot**, and embeds metadata with **Subler**—using native dialogs and notifications.
+**Media Magic** is macOS automation that rips or reads media, converts with **HandBrakeCLI**, renames with **FileBot**, and embeds metadata with **Subler**—using native dialogs and notifications.
 
 ## Documentation
 
@@ -27,7 +27,7 @@ macOS automation that rips or reads media, converts with **HandBrakeCLI**, renam
 
 | Item | Purpose |
 | --- | --- |
-| `MediaConversionPipeline.sh` | Main pipeline (dialogs, logging, batch conversion) |
+| `MediaConversionPipeline.sh` | Main Media Magic pipeline (dialogs, logging, batch conversion) |
 | `LaunchMediaPipeline.applescript` | Opens Terminal and runs the shell script |
 | `.cursor/rules/*.mdc` | Cursor AI coding standards for this project |
 | `.cursor/skills/design-pattern-decision-tree/SKILL.md` | Assistant-facing pattern decision tree |

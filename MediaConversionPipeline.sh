@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# MediaConversionPipeline.sh — macOS media conversion orchestration
+# MediaConversionPipeline.sh — Media Magic: macOS media conversion orchestration
 #
 # Coordinates (in order): MakeMKV (Blu-ray only) → HandBrakeCLI → FileBot → Subler
 #
@@ -73,11 +73,11 @@ notify_user() {
 }
 
 dialog_error() {
-  osascript -e "display alert \"Pipeline Error\" message $(printf '%q' "$1") as critical" 2>/dev/null || printf 'ERROR: %s\n' "$1" >&2
+  osascript -e "display alert \"Media Magic\" message $(printf '%q' "$1") as critical" 2>/dev/null || printf 'ERROR: %s\n' "$1" >&2
 }
 
 dialog_info() {
-  osascript -e "display alert \"Media Pipeline\" message $(printf '%q' "$1") as informational" 2>/dev/null || printf '%s\n' "$1" >&2
+  osascript -e "display alert \"Media Magic\" message $(printf '%q' "$1") as informational" 2>/dev/null || printf '%s\n' "$1" >&2
 }
 
 # Resolve first existing path from a list (positional args).
@@ -430,7 +430,7 @@ main() {
   trap - EXIT
 
   PIPELINE_START_EPOCH=$(date +%s)
-  log_line "=== Pipeline session start ==="
+  log_line "=== Media Magic session start ==="
 
   declare -a SOURCES=()
   populate_sources_from_flow "$flow"
@@ -500,7 +500,7 @@ Total elapsed time: ${elapsed} seconds (${min} min ${sec} sec)
 Log file:
 $LOG_FILE"
   dialog_info "$msg"
-  log_line "=== Pipeline session end (${#SUCCESS_TITLES[@]} ok) ==="
+  log_line "=== Media Magic session end (${#SUCCESS_TITLES[@]} ok) ==="
 }
 
 main "$@"

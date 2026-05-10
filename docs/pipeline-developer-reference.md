@@ -1,4 +1,4 @@
-# Media conversion pipeline — developer reference
+# Media Magic — developer reference
 
 ## High-level architecture
 
@@ -7,7 +7,7 @@ User (osascript dialogs)
         │
         ▼
 ┌───────────────────────────────────────────┐
-│  MediaConversionPipeline.sh              │
+│  MediaConversionPipeline.sh (Media Magic) │
 │  • init_tool_paths (Facade)              │
 │  • prompt_source_flow                     │
 │  • populate_sources_from_flow             │
