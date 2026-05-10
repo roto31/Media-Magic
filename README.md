@@ -10,6 +10,7 @@
 | [docs/pipeline-developer-reference.md](docs/pipeline-developer-reference.md) | Architecture, env vars, conventions for maintainers |
 | [docs/cursor-ai-and-repository-conventions.md](docs/cursor-ai-and-repository-conventions.md) | Cursor rules, skills, lessons learned |
 | [LESSONS_LEARNED.md](LESSONS_LEARNED.md) | Review notes and enforced refactor decisions |
+| [build/releases/README.md](build/releases/README.md) | **Preview releases** — SemVer build IDs, artifacts, Git tags (`v0.1.0+N-preview`) |
 
 ## Quick start (macOS)
 

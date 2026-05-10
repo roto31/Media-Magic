@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Media Magic preview releases — machine-readable index for CI and GitHub Releases.",
+  "product": "Media Magic",
+  "preview_policy": {
+    "github_prerelease": true,
+    "notes": "Every entry MUST be published as a GitHub prerelease until GA."
+  },
+  "semver_core": "0.1.0",
+  "releases": [
+    {
+      "build_id": "0.1.0+1",
+      "git_tag": "v0.1.0+1-preview",
+      "github_prerelease": true,
+      "git_commit": "1a2d53b4cad5d33f13bad302f0f703216f018ef7",
+      "summary": "First SwiftUI MediaVault native shell with pipeline orchestration and tool discovery.",
+      "artifacts": {
+        "app_bundle": "builds/0.1.0+1/MediaVault.app",
+        "zip": null
+      },
+      "bundle_version": "1",
+      "minimum_macos": "13.0"
+    },
+    {
+      "build_id": "0.1.0+2",
+      "git_tag": "v0.1.0+2-preview",
+      "github_prerelease": true,
+      "git_commit": "1a2d53b4cad5d33f13bad302f0f703216f018ef7",
+      "summary": "Incremental preview artifact; same logical baseline as +1 with rebuilt bundle.",
+      "artifacts": {
+        "app_bundle": "builds/0.1.0+2/MediaVault.app",
+        "zip": null
+      },
+      "bundle_version": "2",
+      "minimum_macos": "13.0"
+    },
+    {
+      "build_id": "0.1.0+3",
+      "git_tag": "v0.1.0+3-preview",
+      "github_prerelease": true,
+      "git_commit": "1a2d53b4cad5d33f13bad302f0f703216f018ef7",
+      "summary": "Incremental preview artifact prior to SemVer governance commit.",
+      "artifacts": {
+        "app_bundle": "builds/0.1.0+3/MediaVault.app",
+        "zip": null
+      },
+      "bundle_version": "3",
+      "minimum_macos": "13.0"
+    },
+    {
+      "build_id": "0.1.0+4",
+      "git_tag": "v0.1.0+4-preview",
+      "github_prerelease": true,
+      "git_commit": "49c1083ac4753e1b1e300dd455904516c48e21ba",
+      "summary": "Release-track artifact landed in-repo alongside governance docs.",
+      "artifacts": {
+        "app_bundle": "builds/0.1.0+4/MediaVault.app",
+        "zip": null
+      },
+      "bundle_version": "4",
+      "minimum_macos": "13.0"
+    },
+    {
+      "build_id": "0.1.0+5",
+      "git_tag": "v0.1.0+5-preview",
+      "github_prerelease": true,
+      "git_commit": "49c1083ac4753e1b1e300dd455904516c48e21ba",
+      "summary": "Adds downloadable zip asset for GitHub-style distribution.",
+      "artifacts": {
+        "app_bundle": "builds/0.1.0+5/MediaVault.app",
+        "zip": "builds/0.1.0+5/MediaVault-0.1.0+5-macOS.zip"
+      },
+      "bundle_version": "5",
+      "minimum_macos": "13.0"
+    },
+    {
+      "build_id": "0.1.0+6",
+      "git_tag": "v0.1.0+6-preview",
+      "github_prerelease": true,
+      "git_commit": "54f3112d508bd0c898db464ad33bdc06d344ef56",
+      "summary": "Settings-driven pipeline controls; debug symbols (dSYM) included under build tree.",
+      "artifacts": {
+        "app_bundle": "builds/0.1.0+6/MediaVault.app",
+        "zip": null,
+        "dsym": "builds/0.1.0+6/MediaVault.app/Contents/MacOS/MediaVault.dSYM"
+      },
+      "bundle_version": "6",
+      "minimum_macos": "13.0"
+    },
+    {
+      "build_id": "0.1.0+7",
+      "git_tag": "v0.1.0+7-preview",
+      "github_prerelease": true,
+      "git_commit": "54f3112d508bd0c898db464ad33bdc06d344ef56",
+      "summary": "Latest preview build with updated binary and symbol bundle as of BUILD_NUMBER 7.",
+      "artifacts": {
+        "app_bundle": "builds/0.1.0+7/MediaVault.app",
+        "zip": null,
+        "dsym": "builds/0.1.0+7/MediaVault.app/Contents/MacOS/MediaVault.dSYM"
+      },
+      "bundle_version": "7",
+      "minimum_macos": "13.0"
+    }
+  ]
+}
