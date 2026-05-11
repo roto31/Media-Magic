@@ -8,7 +8,7 @@ as a shopping list. Every row includes:
 - **Pain category** — Creational / Structural / Behavioural
 - **Branch logic** — the exact sub-decision that selects this pattern
 - **Code-level detection signals** — observable triggers in source
-- **Swift implementation note** — matches MediaVault conventions
+- **Swift implementation note** — matches Media Magic conventions
 - **Framework notes** — React/Next.js and Python/FastAPI for legacy
   compatibility with the prior `.cursor/rules` work
 - **Common misuse to avoid**
@@ -19,14 +19,14 @@ Conventions abbreviation key for the Swift column:
 - `init(dep: Dep)` — initializer DI. No service locator. No new
   singletons.
 - `enum Foo: Error, LocalizedError` — typed errors. Ad-hoc throws use
-  `NSError(domain: "MediaVault", code:, userInfo: [NSLocalizedDescriptionKey: …])`.
+  `NSError(domain: "MediaMagic", code:, userInfo: [NSLocalizedDescriptionKey: …])`.
 - `// MARK: - Section` separators; `///` doc comments for public API.
 
 ---
 
 ## Creational
 
-| Pattern | Branch logic | Detection signals | Swift (MediaVault style) | React/Next.js | Python/FastAPI | Common misuse |
+| Pattern | Branch logic | Detection signals | Swift (Media Magic style) | React/Next.js | Python/FastAPI | Common misuse |
 | --- | --- | --- | --- | --- | --- | --- |
 | **Builder** | Creation → many instances, complex composition, conditional fields | `init(...)` with 7+ params; many optional flags; same `init` called with subtly different shapes; partially-initialized objects passed around | `struct FooBuilder { … func with…(…) -> Self … func build() throws -> Foo }`. `build()` is `throws`; partial state is unreachable. Use only when ≥7 inputs or conditional inclusion exists — otherwise pass a parameter `struct` (mirrors `PipelineRunOptions`). | Builder is rare; a typed config object or a factory hook is more idiomatic. | Pydantic model + dependency that constructs the domain object (`Depends(make_foo)`). | Builder that returns a non-throwing partial object; "chainable setters" on a class shared mutably; `build()` that performs domain logic. |
 | **Factory Method** | Creation → subclass / strategy picks the concrete implementation | One construction site, several concrete subclasses returned via a single function | `static func makeRunner(for: Kind) -> some PipelineStageRunner`. Caller depends on the protocol, never on the concrete struct. | Custom hook returning the right component per variant. | `Depends()` resolving to one of several concrete services. | Factory that returns a concrete (defeats the abstraction); factory whose only purpose is to call `init` once. |
@@ -36,7 +36,7 @@ Conventions abbreviation key for the Swift column:
 
 ## Structural
 
-| Pattern | Branch logic | Detection signals | Swift (MediaVault style) | React/Next.js | Python/FastAPI | Common misuse |
+| Pattern | Branch logic | Detection signals | Swift (Media Magic style) | React/Next.js | Python/FastAPI | Common misuse |
 | --- | --- | --- | --- | --- | --- | --- |
 | **Adapter** | Structure → external interface incompatible with internal one | External API JSON / DTO types referenced from `View`s or domain models; argv translation for a CLI; URLSession delegate methods | **Protocol at the boundary** + a `final class` or `struct` conformer that contains argv/JSON translation only. Mirrors `Process.runShell(_:_:)` extension and `URLSessionDownloadDelegate`. **No business rules** in the adapter. | Hook or service module that maps REST responses to typed view models. | Pydantic schema in routers; mappers in `adapters/` modules. | Adapter that validates pricing, applies discounts, or makes domain decisions. |
 | **Facade** | Structure → caller invokes 4+ subsystem APIs in sequence for one logical task | Long sequences of low-level calls; subsystem types leaking into call sites | `enum` of `static func`s **or** a small `final class` exposing intention-named methods. Mirrors `FileBotScriptLibrary` and the `tools.handbrakeCLI` accessors. | One module per bounded context wrapping third-party SDKs. | One service class per domain that orchestrates repo + external calls. | Facade that grows domain decisions; "god facade" hiding everything. |
@@ -48,7 +48,7 @@ Conventions abbreviation key for the Swift column:
 
 ## Behavioural
 
-| Pattern | Branch logic | Detection signals | Swift (MediaVault style) | React/Next.js | Python/FastAPI | Common misuse |
+| Pattern | Branch logic | Detection signals | Swift (Media Magic style) | React/Next.js | Python/FastAPI | Common misuse |
 | --- | --- | --- | --- | --- | --- | --- |
 | **Strategy** | Behaviour → swap interchangeable algorithms / policies at runtime | `switch enumValue { … }` repeated in 3+ files; `if vendor == …` sprawling across handlers; per-stage parsers with different shapes | **Prefer closures or type-safe enums in-module** (mirrors `parseLine: @Sendable @escaping (String) -> Double?` in `PipelineController.runProcess`). **Promote to protocol** when strategies ship from outside the module or carry state. | Custom hook per strategy; component prop selecting an injected handler. | Protocol class + registry resolved via `Depends()`. | Strategy with one implementation (YAGNI); strategy that still contains the original `switch` internally. |
 | **State** | Behaviour → object behaviour depends on internal mode AND transitions are explicit | Multiple boolean flags that together imply a mode; `switch state { ... }` whose cases enable / disable other operations | `enum Stage { … }` with associated values for stage-local data (mirrors `enum PipelineStage`). Transitions centralized in a single method on the owning `@MainActor` view model; illegal transitions throw. | Reducer + discriminated-union state. | Finite-state machine class with explicit transition table. | State pattern with implicit transitions; using State when Strategy fits (no mode involved). |
@@ -90,5 +90,5 @@ Conventions abbreviation key for the Swift column:
    category. Note the result in `PATTERN_CHANGE_TEMPLATE.md`.
 4. **Pass the anti-pattern check** in the same template.
 5. **Match the conventions column.** New Swift code MUST match
-   MediaVault style (initializer DI, `@MainActor` view models, value-
+   Media Magic style (initializer DI, `@MainActor` view models, value-
    type domain models, typed errors, MARK sections, doc comments).

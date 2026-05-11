@@ -1,4 +1,4 @@
-# Design-Pattern Prompt Templates (Swift / MediaVault)
+# Design-Pattern Prompt Templates (Swift / Media Magic)
 
 Five auditable prompt templates that embed the decision-tree methodology
 from `.cursor/rules/design-pattern-decision-tree.mdc`. Each template is
@@ -7,12 +7,12 @@ structured output that can be reviewed and audited.
 
 Conventions encoded in every template:
 
-- All Swift examples follow the MediaVault style:
+- All Swift examples follow the Media Magic style:
   - `@MainActor final class X: ObservableObject` for view-state holders.
   - `struct` / `enum` for value types.
   - Initializer DI; `@EnvironmentObject` for view-tree distribution.
   - Errors as `enum FooError: Error, LocalizedError` or
-    `NSError(domain: "MediaVault", code:, userInfo:)`.
+    `NSError(domain: "MediaMagic", code:, userInfo:)`.
   - Persistence via `private enum Keys { static let … }` + `UserDefaults`.
   - `// MARK: - Section` separators; `///` doc comments for public API.
 - Branch labels are the three roots: **Creational** / **Structural** /
@@ -73,7 +73,7 @@ For each candidate above:
 ### Worked example — input
 
 ```swift
-// Excerpt of PipelineController.processItem(at:) — MediaVault
+// Excerpt of PipelineController.processItem(at:) — Media Magic
 if runOptions.skipFileBot {
     items[index].stageNote = "Skipped by run option"
     log("FileBot skipped by run option")
@@ -268,8 +268,8 @@ OUTPUT (one block per identified pattern, no other prose):
 
 ```swift
 // Excerpt — hypothetical
-final class MediaVaultShared {
-    static let shared = MediaVaultShared()
+final class MediaMagicShared {
+    static let shared = MediaMagicShared()
     var settings = AppSettings()
     var tools = ToolManager()
     var pipeline: PipelineController!
@@ -283,7 +283,7 @@ final class MediaVaultShared {
 
 ```
 ### Pattern: Singleton
-- Where: MediaVaultShared.swift
+- Where: MediaMagicShared.swift
 - Inferred pain (in code terms): wanted one place to access app-wide
   collaborators.
 - Required branch trace: none — "easy global access" is not a pain.
@@ -295,9 +295,9 @@ final class MediaVaultShared {
   - "Initializer DI is the default": fail — this prevents init injection.
 - Anti-pattern proximity: "Singleton for convenience" (explicitly rejected).
 - Verdict: wrong pattern applied
-- Correct approach: keep current MediaVaultApp wiring — `@StateObject`
+- Correct approach: keep current MediaMagicApp wiring — `@StateObject`
   in the App scene, `@EnvironmentObject` propagation, initializer DI
-  in `PipelineController(tools:)`. Delete `MediaVaultShared`. Branch
+  in `PipelineController(tools:)`. Delete `MediaMagicShared`. Branch
   trace is Creational → "shared collaborators" → DI, not Singleton.
 ```
 
@@ -308,7 +308,7 @@ final class MediaVaultShared {
 ### When to use
 The Code Review Prompt returned `wrong pattern applied` or
 `pattern missing`. You now implement the correct pattern with full
-before/after Swift code that conforms to MediaVault conventions.
+before/after Swift code that conforms to Media Magic conventions.
 
 ### Prompt template
 
@@ -325,7 +325,7 @@ INPUT:
 CONSTRAINTS:
 - Swift / SwiftUI / Combine; @MainActor for view-state holders.
 - Initializer DI; no service locators; no new singletons.
-- Errors: enum Foo: Error, LocalizedError OR NSError(domain: "MediaVault", ...).
+- Errors: enum Foo: Error, LocalizedError OR NSError(domain: "MediaMagic", ...).
 - File header // block + /// doc comments + // MARK: - sections.
 - Preserve existing behaviour unless explicitly told to change it.
 
@@ -582,7 +582,7 @@ ahead even if you "know" the answer):
 ## Single recommendation
 - Pattern: {{name OR "no pattern — keep current code"}}
 - Branch trace: {{exact path you walked through Q1/Q2/Q3}}
-- Swift implementation sketch (matches MediaVault conventions):
+- Swift implementation sketch (matches Media Magic conventions):
 ```swift
 {{ready-to-ship snippet with file path comment, MARK sections, /// docs}}
 ```

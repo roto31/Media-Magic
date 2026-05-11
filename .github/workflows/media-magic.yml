@@ -1,7 +1,7 @@
-# Compile-only CI for MediaVault (Swift single-target app).
+# Compile-only CI for Media Magic (Swift single-target app).
 # Signed releases + GitHub asset upload remain ./build.sh release (local maintainer).
 
-name: MediaVault Swift compile
+name: Media Magic Swift compile
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
     branches: [main]
 
 concurrency:
-  group: mediavault-${{ github.workflow }}-${{ github.ref }}
+  group: media-magic-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -26,6 +26,6 @@ jobs:
           ARCH="$(uname -m)"
           swiftc -Onone -g \
             -target "${ARCH}-apple-macosx13.0" \
-            -o /tmp/MediaVaultCI \
-            Sources/MediaVault/*.swift
-          echo "OK: $(file /tmp/MediaVaultCI)"
+            -o /tmp/MediaMagicCI \
+            Sources/MediaMagic/*.swift
+          echo "OK: $(file /tmp/MediaMagicCI)"

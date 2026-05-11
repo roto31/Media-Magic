@@ -158,7 +158,7 @@ enum PipelineQueuedWire: Equatable {
         let dir = String(sourcePath.dropFirst(bluRayRipPendingMarker.count + 2))
         guard !dir.isEmpty else {
             throw NSError(
-                domain: "MediaVault", code: 1,
+                domain: "MediaMagic", code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "Invalid Blu-ray source spec"]
             )
         }
@@ -301,7 +301,7 @@ final class PipelineController: ObservableObject {
         await orchestrator.forceTerminateForAppExit()
     }
 
-    // MARK: - Recovery API (driven by MediaVaultApp at startup)
+    // MARK: - Recovery API (driven by MediaMagicApp at startup)
 
     /// Holds info to surface a non-blocking alert (corruption / version skew).
     struct RecoveryAlert: Identifiable, Equatable {
@@ -397,7 +397,7 @@ final class PipelineController: ObservableObject {
                     logFilePath: currentLogFilePath
                 )
                 notify(
-                    title: "MediaVault drained",
+                    title: "Media Magic drained",
                     body: "\(succeeded.count) of \(items.count) succeeded in \(PipelineSummary.format(elapsed))"
                 )
             }
@@ -499,7 +499,7 @@ final class PipelineController: ObservableObject {
         }
         if !fm.createFile(atPath: url.path, contents: nil) {
             // Try again at the home directory as a last resort.
-            let fallback = fm.homeDirectoryForCurrentUser.appendingPathComponent("MediaVault_session_log.txt")
+            let fallback = fm.homeDirectoryForCurrentUser.appendingPathComponent("MediaMagic_session_log.txt")
             _ = fm.createFile(atPath: fallback.path, contents: nil)
             logHandle = try? FileHandle(forWritingTo: fallback)
             logURL = fallback

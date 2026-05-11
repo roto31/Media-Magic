@@ -13,4 +13,4 @@ alwaysApply: true
 - Use `gh release create` when release tag is missing; otherwise use
   `gh release upload --clobber` to update the artifact.
 - Keep artifact naming deterministic:
-  - `MediaVault-<VERSION>+<BUILD_NUMBER>-macOS.zip`
+  - `MediaMagic-<VERSION>+<BUILD_NUMBER>-macOS.zip`

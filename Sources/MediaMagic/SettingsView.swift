@@ -91,7 +91,7 @@ struct SettingsView: View {
                 GroupBox("Subler") {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(
-                            "MediaVault runs SublerCli with `-source` and `-optimize`, which muxes metadata and artwork into the file. SublerCli does not use FileBot-style `--db` selectors; adjust optional flags below only if your installed SublerCli supports them (see Help)."
+                            "Media Magic runs SublerCli with `-source` and `-optimize`, which muxes metadata and artwork into the file. SublerCli does not use FileBot-style `--db` selectors; adjust optional flags below only if your installed SublerCli supports them (see Help)."
                         )
                         .font(.caption)
                         .foregroundStyle(.secondary)

@@ -1,7 +1,7 @@
 # Pattern Change Record (template)
 
 Complete this document **every time a design pattern is introduced, replaced,
-or removed** in the MediaVault codebase. The completed record lives next to
+or removed** in the Media Magic codebase. The completed record lives next to
 the PR description (paste it into the PR body) and is referenced from the
 commit message. Branch trace is mandatory — see
 `.cursor/rules/design-pattern-decision-tree.mdc`.
@@ -15,8 +15,8 @@ commit message. Branch trace is mandatory — see
 - **Author**: `…`
 - **Change type**: `introduce` | `replace` | `remove`
 - **Files affected** (one per line, with line ranges where useful):
-  - `Sources/MediaVault/…swift:L…–L…`
-  - `Sources/MediaVault/…swift:L…–L…`
+  - `Sources/MediaMagic/…swift:L…–L…`
+  - `Sources/MediaMagic/…swift:L…–L…`
 - **Architectural layer(s) touched**:
   - `View` (SwiftUI `View`s)
   - `ViewModel` (`@MainActor final class … : ObservableObject`)
@@ -89,7 +89,7 @@ traces — never merge them.
   - `///` doc comments on public API: yes
 - **Error handling**:
   - Domain `enum Foo: Error, LocalizedError`: yes / no — name: `…`
-  - `NSError(domain: "MediaVault", code: …, userInfo: …)`: yes / no
+  - `NSError(domain: "MediaMagic", code: …, userInfo: …)`: yes / no
   - `async throws` propagation preserved: yes / no
 - **Concurrency**:
   - `@MainActor` annotation respected on view-state holders: yes / no
@@ -165,7 +165,7 @@ rule apply:
 ## 9. Rollback plan
 
 - Revert commit: `…`
-- Build to roll back to: `builds/<VERSION>+<BUILD_NUMBER>/MediaVault.app`
+- Build to roll back to: `builds/<VERSION>+<BUILD_NUMBER>/MediaMagic.app`
 - Risk of partial revert (data shape, persisted keys, public API): `…`
 
 ---
@@ -174,8 +174,8 @@ rule apply:
 
 > Use this as a sanity-check; it is not a substitute for the full form.
 
-- Files: `Sources/MediaVault/AppSettings.swift:L106-L116`,
-  `Sources/MediaVault/FileBotOptions.swift:L34-L51`
+- Files: `Sources/MediaMagic/AppSettings.swift:L106-L116`,
+  `Sources/MediaMagic/FileBotOptions.swift:L34-L51`
 - Pain: `applyNamingPreset(_:)` branched on a raw-string preset; adding
   presets required editing the `if`-ladder in `AppSettings`.
 - Branch: Behavioural → branching by variant → Strategy (Swift idiom:

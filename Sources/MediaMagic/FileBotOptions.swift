@@ -1,6 +1,6 @@
 import Foundation
 
-/// Names recognized by FileBot `--db` for typical MediaVault rename workflows.
+/// Names recognized by FileBot `--db` for typical Media Magic rename workflows.
 /// Reference: https://www.filebot.net/cli.html
 enum FileBotDatabaseChoice: String, CaseIterable, Identifiable {
     case theMovieDB = "TheMovieDB"

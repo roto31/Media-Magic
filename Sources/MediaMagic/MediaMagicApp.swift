@@ -1,5 +1,5 @@
-// MediaVaultApp.swift
-// Main entry point for the MediaVault native macOS application.
+// MediaMagicApp.swift
+// Main entry point for the Media Magic native macOS application.
 //
 // Architecture:
 //   - SwiftUI App with a single window
@@ -8,7 +8,7 @@
 //   - Each pipeline stage (MakeMKV, HandBrake, FileBot, Subler) is its own
 //     async function that streams output back via a delegate.
 //
-// Build with: swiftc *.swift -o MediaVault -framework SwiftUI -framework AppKit
+// Build with: swiftc *.swift -o MediaMagic -framework SwiftUI -framework AppKit
 // Or: see build.sh for full .app bundle assembly.
 
 import SwiftUI
@@ -16,7 +16,7 @@ import AppKit
 import UserNotifications
 
 @main
-struct MediaVaultApp: App {
+struct MediaMagicApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var settings = AppSettings()
     @StateObject private var automationPresets = AutomationPresetStore()
@@ -43,7 +43,7 @@ struct MediaVaultApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("MediaVault") {
+        WindowGroup("Media Magic") {
             ContentView()
                 .environmentObject(settings)
                 .environmentObject(automationPresets)
@@ -76,32 +76,32 @@ struct MediaVaultApp: App {
             CommandGroup(replacing: .newItem) { }
             CommandGroup(after: .help) {
                 Button("FileBot CLI Guide…") {
-                    MediaVaultDocumentation.open(MediaVaultDocumentation.fileBotCLI)
+                    MediaMagicDocumentation.open(MediaMagicDocumentation.fileBotCLI)
                 }
                 Button("FileBot Scripts Guide…") {
-                    MediaVaultDocumentation.open(MediaVaultDocumentation.fileBotScripts)
+                    MediaMagicDocumentation.open(MediaMagicDocumentation.fileBotScripts)
                 }
                 Button("FileBot parameters (--def)…") {
-                    MediaVaultDocumentation.open(MediaVaultDocumentation.fileBotManpage)
+                    MediaMagicDocumentation.open(MediaMagicDocumentation.fileBotManpage)
                 }
                 Button("FileBot script repository…") {
-                    MediaVaultDocumentation.open(MediaVaultDocumentation.fileBotScriptsRepo)
+                    MediaMagicDocumentation.open(MediaMagicDocumentation.fileBotScriptsRepo)
                 }
                 Button("HandBrake CLI Guide…") {
-                    MediaVaultDocumentation.open(MediaVaultDocumentation.handBrakeCLI)
+                    MediaMagicDocumentation.open(MediaMagicDocumentation.handBrakeCLI)
                 }
                 Button("Subler CLI Resources…") {
-                    MediaVaultDocumentation.open(MediaVaultDocumentation.sublerCLIResources)
+                    MediaMagicDocumentation.open(MediaMagicDocumentation.sublerCLIResources)
                 }
                 Button("Subler Wiki…") {
-                    MediaVaultDocumentation.open(MediaVaultDocumentation.sublerWiki)
+                    MediaMagicDocumentation.open(MediaMagicDocumentation.sublerWiki)
                 }
             }
         }
     }
 }
 
-private enum MediaVaultDocumentation {
+private enum MediaMagicDocumentation {
     static let fileBotCLI = "https://www.filebot.net/cli.html"
     static let fileBotScripts = "https://www.filebot.net/script.html"
     static let fileBotManpage = "https://www.filebot.net/manpage.html"

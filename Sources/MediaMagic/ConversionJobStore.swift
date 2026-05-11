@@ -49,7 +49,7 @@ actor ConversionJobStore {
         ).first ?? URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent("Library/Application Support")
         return support
-            .appendingPathComponent("MediaVault", isDirectory: true)
+            .appendingPathComponent("MediaMagic", isDirectory: true)
             .appendingPathComponent("state", isDirectory: true)
     }
 

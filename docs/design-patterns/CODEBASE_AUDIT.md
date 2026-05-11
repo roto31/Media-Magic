@@ -1,14 +1,14 @@
-# MediaVault Swift codebase audit — design-pattern decision tree
+# Media Magic Swift codebase audit — design-pattern decision tree
 
 **Rule:** `.cursor/rules/design-pattern-decision-tree.mdc`  
 **Method:** Pattern Detection Prompt (template #1) in `docs/design-patterns/PROMPT_TEMPLATES.md`  
-**Scope:** `Sources/MediaVault/*.swift` (nine files)
+**Scope:** `Sources/MediaMagic/*.swift` (nine files)
 
 ## Summary table
 
 | File | Violations found | Verdict | Files changed this audit |
 | --- | --- | --- | --- |
-| `MediaVaultApp.swift` | 0 | No action — `MediaVaultDocumentation` is already a small Facade for URLs | — |
+| `MediaMagicApp.swift` | 0 | No action — `MediaMagicDocumentation` is already a small Facade for URLs | — |
 | `ContentView.swift` | 0 | No commit this audit (working tree retained); Blu-ray wire comment aligned with `PipelineQueuedWire` | — |
 | `SettingsView.swift` | 0 | Observer bindings only; no absent-pattern signal | — |
 | `AppSettings.swift` | 0 | Many `@Published` + `didSet { save }` is **Observer** for persistence, not Builder (Builder signal requires ≥7 inputs **and** conditional field inclusion in construction) | — |
@@ -26,7 +26,7 @@
 
 **Pain (quoted):**
 
-```239:268:Sources/MediaVault/PipelineController.swift
+```239:268:Sources/MediaMagic/PipelineController.swift
         if runOptions.skipFileBot {
             items[index].stageNote = "Skipped by run option"
             log("FileBot skipped by run option")
@@ -56,7 +56,7 @@
 
 #### Pattern change record (inline)
 
-- **Scope:** `Sources/MediaVault/PipelineController.swift` — `processItem`, new `postHandBrakeSteps`, `PipelinePostHandBrakeStep`.
+- **Scope:** `Sources/MediaMagic/PipelineController.swift` — `processItem`, new `postHandBrakeSteps`, `PipelinePostHandBrakeStep`.
 - **Pain:** Same as quoted block; optional post-rename script and Apple TV copy repeated the same control-flow shape.
 - **Branch:** `Behavioural → branching by variant → Strategy`.
 - **Swift idiom:** Struct table + `@MainActor` async `run` closures; initializer DI unchanged (`init(tools:)`).
@@ -70,11 +70,11 @@
 
 **Pain (quoted):**
 
-```207:218:Sources/MediaVault/PipelineController.swift
+```207:218:Sources/MediaMagic/PipelineController.swift
         if workingPath.hasSuffix(".bluray-pending") {
             let parts = workingPath.components(separatedBy: "::")
             guard parts.count == 2 else {
-                throw NSError(domain: "MediaVault", code: 1,
+                throw NSError(domain: "MediaMagic", code: 1,
                               userInfo: [NSLocalizedDescriptionKey: "Invalid Blu-ray source spec"])
             }
             let ripDir = parts[1]
@@ -99,11 +99,11 @@ Queued sources are `bluray.bluray-pending::<ripDir>` (see `ContentView`); the **
 
 ---
 
-## `MediaVaultApp.swift`
+## `MediaMagicApp.swift`
 
 **Signals:** None triggering Creational / Structural / Behavioural patterns beyond existing structure.
 
-**Verdict:** No change. `MediaVaultDocumentation` is a minimal URL table + opener — acceptable.
+**Verdict:** No change. `MediaMagicDocumentation` is a minimal URL table + opener — acceptable.
 
 ---
 
@@ -177,7 +177,7 @@ Queued sources are `bluray.bluray-pending::<ripDir>` (see `ContentView`); the **
 
 ## Deferred / blocked
 
-- **Fine-grained `git diff HEAD~1 -- Sources/MediaVault/PipelineController.swift`:** This branch’s `PipelineController` already contained settings/FileBot-script extensions before this audit; the committed file is the full working-tree version after the audit refactor. Isolating only audit hunks in git history would require interactive staging or a temporary reset of that file to `HEAD` and manual replay of non-audit features — out of scope for a single safe commit without losing co-located WIP.
+- **Fine-grained `git diff HEAD~1 -- Sources/MediaMagic/PipelineController.swift`:** This branch’s `PipelineController` already contained settings/FileBot-script extensions before this audit; the committed file is the full working-tree version after the audit refactor. Isolating only audit hunks in git history would require interactive staging or a temporary reset of that file to `HEAD` and manual replay of non-audit features — out of scope for a single safe commit without losing co-located WIP.
 
 ---
 
