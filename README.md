@@ -18,28 +18,45 @@ Sources/MediaVault/
   MediaVaultApp.swift
   ContentView.swift
   PipelineController.swift
+  ConversionOrchestrator.swift
+  ConversionJobStore.swift
+  ConversionJobModels.swift
+  ToolCheckpointAdapter.swift
+  RunControlView.swift
+  LogViewerView.swift
   ToolManager.swift
+  … (additional Swift sources)
 build.sh
 MediaConversionPipeline.sh
 LaunchMediaPipeline.applescript
+docs/
+  MEDIAVAULT_ORCHESTRATION.md   # deep-dive: lanes, persistence, diagrams
+  BUILD_PROCESS.md
+.github/workflows/
+  mediavault.yml                 # compile-only CI on push/PR
 ```
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    User["User"] --> UI["SwiftUI ContentView"]
-    UI --> Controller["PipelineController"]
+    User["User"] --> UI["SwiftUI ContentView + RunControlView"]
+    UI --> PC["PipelineController (@MainActor)"]
     UI --> Tools["ToolManager"]
+    PC --> ORCH["ConversionOrchestrator (actor)"]
+    ORCH --> Store["ConversionJobStore (JSON, atomic writes)"]
+    ORCH --> Proc["Foundation.Process per stage"]
     Tools --> HB["HandBrakeCLI"]
     Tools --> Subler["SublerCli"]
     Tools --> MKV["MakeMKV (optional)"]
     Tools --> FB["FileBot (optional)"]
-    Controller --> Proc["Process runner + output streaming"]
-    Proc --> Log["conversion_log_YYYY-MM-DD_HH-MM-SS.txt"]
+    Proc --> Log["Session log + PipelineLogEntry stream"]
     Proc --> Notify["UNUserNotificationCenter"]
-    Controller --> Summary["Run summary (success/failure)"]
+    PC --> LVV["LogViewerView (separate window)"]
+    PC --> Summary["Run summary when queue drains"]
 ```
+
+Full diagrams (state machine, sequences, ER sketch): [docs/MEDIAVAULT_ORCHESTRATION.md](docs/MEDIAVAULT_ORCHESTRATION.md).
 
 ## End-To-End Pipeline Flow
 
@@ -66,24 +83,23 @@ sequenceDiagram
     participant UI as ContentView
     participant TM as ToolManager
     participant PC as PipelineController
+    participant OR as ConversionOrchestrator
     participant CLI as ExternalCLI
 
     User->>UI: Launch app
     UI->>TM: prepare()
     TM->>TM: Resolve/download tools
+    UI->>PC: refreshOrchestratorToolPaths()
     User->>UI: Choose sources + output and press Convert
-    UI->>PC: enqueue(...), run()
-    loop per item
-        PC->>CLI: MakeMKV (Blu-ray only)
-        CLI-->>PC: streamed output
-        PC->>CLI: HandBrakeCLI
-        CLI-->>PC: streamed output with progress
-        PC->>CLI: FileBot (if available)
-        CLI-->>PC: rename output
-        PC->>CLI: SublerCli
-        CLI-->>PC: completion
+    UI->>PC: enqueue(sources, output, options)
+    PC->>OR: enqueue jobs (async)
+    loop per running job / stage
+        OR->>CLI: MakeMKV / HandBrake / FileBot / Subler
+        CLI-->>OR: streamed stdout/stderr
+        OR-->>PC: OrchestratorEvent.state + .log
+        OR->>OR: persist snapshot (ConversionJobStore)
     end
-    PC-->>UI: summary + log path
+    OR-->>PC: allDrained + summary data
 ```
 
 ## Settings And Run Overrides
@@ -165,12 +181,16 @@ flowchart TD
     VerifySign --> Package["Zip app artifact"]
     Package --> EnsureGh["Validate gh auth + git repo context"]
     EnsureGh --> ReleaseExists{"GitHub release exists?"}
-    ReleaseExists -->|"No"| CreateRelease["Create release/tag notes"]
-    ReleaseExists -->|"Yes"| EditRelease["Update release notes"]
+    ReleaseExists -->|"No"| CreateRelease["gh release create (optional --prerelease)"]
+    ReleaseExists -->|"Yes"| EditRelease["gh release edit notes (optional --prerelease)"]
     CreateRelease --> UploadAsset["Upload zip asset (--clobber)"]
     EditRelease --> UploadAsset
     UploadAsset --> DoneBuild["Release build complete"]
 ```
+
+Optional pre-release flag: `MEDIAVAULT_PRERELEASE=1 ./build.sh release` passes `--prerelease` to `gh` while keeping the tag as `<VERSION>+<BUILD_NUMBER>` (see `docs/BUILD_PROCESS.md`).
+
+CI: `.github/workflows/mediavault.yml` runs a **compile-only** check on push/PR; it does not replace `./build.sh release`.
 
 Distribution note:
 - This mode is signed but **not notarized**.

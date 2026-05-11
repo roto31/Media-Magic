@@ -47,7 +47,6 @@ struct ResolvedTool {
 
 @MainActor
 final class ToolManager: ObservableObject {
-
     // Published state for the UI to observe.
     @Published var status: String = "Ready"
     @Published var progress: Double = 0          // 0.0 ... 1.0
@@ -203,6 +202,7 @@ final class ToolManager: ObservableObject {
     private func ensureSublerCLI() async throws -> String {
         let installed = Self.binDir.appendingPathComponent("SublerCli").path
         if FileManager.default.isExecutableFile(atPath: installed) {
+            _ = try? Process.runShell("/usr/bin/xattr", ["-dr", "com.apple.quarantine", installed])
             return installed
         }
 
@@ -215,13 +215,15 @@ final class ToolManager: ObservableObject {
                 "/Applications/Subler.app/Contents/MacOS/SublerCli",
             ]
         ) {
-            return userPath
+            try materializeSublerCli(from: URL(fileURLWithPath: userPath), managedPath: installed)
+            return installed
         }
 
         // Subler.app may have an embedded CLI tool — check there.
         let inApp = "/Applications/Subler.app/Contents/Resources/SublerCli"
         if FileManager.default.isExecutableFile(atPath: inApp) {
-            return inApp
+            try materializeSublerCli(from: URL(fileURLWithPath: inApp), managedPath: installed)
+            return installed
         }
 
         throw ToolError.notFound(
@@ -332,6 +334,20 @@ final class ToolManager: ObservableObject {
             ofItemAtPath: url.path
         )
     }
+
+    /// Copy a discovered `SublerCli` into Application Support and strip quarantine so
+    /// Gatekeeper does not block execution (same pattern as `ensureHandBrakeCLI`).
+    private func materializeSublerCli(from source: URL, managedPath: String) throws {
+        let dest = URL(fileURLWithPath: managedPath)
+        let fm = FileManager.default
+        if fm.fileExists(atPath: dest.path) {
+            try fm.removeItem(at: dest)
+        }
+        try fm.copyItem(at: source, to: dest)
+        try setExecutable(dest)
+        _ = try? Process.runShell("/usr/bin/xattr", ["-dr", "com.apple.quarantine", dest.path])
+    }
+
 }
 
 // MARK: - URLSession download progress delegate

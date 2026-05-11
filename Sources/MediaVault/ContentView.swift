@@ -21,8 +21,9 @@ private enum BatchProfileSelection: Hashable {
 struct ContentView: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var presetStore: AutomationPresetStore
-    @StateObject private var tools = ToolManager()
-    @StateObject private var pipeline: PipelineController
+    @EnvironmentObject private var tools: ToolManager
+    @EnvironmentObject private var pipeline: PipelineController
+    @Environment(\.openWindow) private var openWindow
 
     @State private var sourceKind: SourceKind = .videoFile
     @State private var pickedFiles: [URL] = []
@@ -50,12 +51,6 @@ struct ContentView: View {
     @State private var didHydrateAutomationFields = false
     @State private var saveBatchPresetName = ""
     @State private var showSaveBatchPresetAlert = false
-
-    init() {
-        let t = ToolManager()
-        _tools = StateObject(wrappedValue: t)
-        _pipeline = StateObject(wrappedValue: PipelineController(tools: t))
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -85,6 +80,10 @@ struct ContentView: View {
                 if shouldForce {
                     settings.forceFirstRunSetupOnNextLaunch = false
                 }
+                // Snapshot the resolved tool binary paths into the
+                // orchestrator so its non-MainActor executors don't have to
+                // hop the actor on every subprocess launch.
+                await pipeline.refreshOrchestratorToolPaths()
             } catch {
                 setupError = error.localizedDescription
             }
@@ -100,6 +99,19 @@ struct ContentView: View {
                message: {
                    Text(setupError ?? "")
                })
+        .alert(
+            (pipeline.recoveryAlert?.title ?? ""),
+            isPresented: Binding(
+                get: { pipeline.recoveryAlert != nil },
+                set: { if !$0 { pipeline.recoveryAlert = nil } }
+            ),
+            actions: {
+                Button("OK") { pipeline.recoveryAlert = nil }
+            },
+            message: {
+                Text(pipeline.recoveryAlert?.message ?? "")
+            }
+        )
         .sheet(isPresented: Binding(
             get: { pipeline.summary != nil && !pipeline.isRunning },
             set: { if !$0 { pipeline.summary = nil } }
@@ -132,6 +144,11 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Button("Show Log") {
+                openWindow(id: "process-log")
+            }
+            .buttonStyle(.bordered)
+            .help("Open the live process log window")
             Button {
                 NSApplication.shared.sendAction(
                     Selector(("showSettingsWindow:")),
@@ -469,61 +486,103 @@ struct ContentView: View {
     // MARK: - Queue card
 
     private var queueCard: some View {
-        GroupBox(label: Label("Queue", systemImage: "list.bullet.rectangle")) {
-            if pipeline.items.isEmpty {
-                HStack {
-                    Spacer()
-                    VStack(spacing: 6) {
-                        Image(systemName: "tray")
-                            .font(.system(size: 32, weight: .ultraLight))
-                            .foregroundStyle(.secondary)
-                        Text("No items yet — pick sources above and press Convert")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
-                .frame(minHeight: 80)
-                .padding(.vertical, 8)
-            } else {
-                VStack(spacing: 8) {
-                    ForEach(pipeline.items) { item in
-                        QueueRow(item: item, isCurrent: pipeline.isRunning &&
-                                 pipeline.items.firstIndex(of: item) == pipeline.currentIndex)
-                    }
-                }
-                .padding(8)
-            }
+        VStack(alignment: .leading, spacing: 16) {
+            laneCard(.file, title: "File conversions", icon: "doc.on.doc")
+            laneCard(.disc, title: "Disc conversions", icon: "opticaldisc")
         }
+    }
+
+    private func laneCard(_ lane: PipelineLane, title: String, icon: String) -> some View {
+        let items = pipeline.items(on: lane)
+        let activity = pipeline.laneActivity[lane] ?? LaneActivitySummary()
+        return GroupBox(label: Label(title, systemImage: icon)) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    Text(laneStatusLine(activity))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if activity.hasAny {
+                        RunControlView(scope: .lane(lane))
+                    }
+                }
+                if items.isEmpty {
+                    HStack {
+                        Spacer()
+                        VStack(spacing: 4) {
+                            Image(systemName: "tray")
+                                .font(.system(size: 22, weight: .ultraLight))
+                                .foregroundStyle(.secondary)
+                            Text("No \(lane.rawValue.lowercased()) jobs queued")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .frame(minHeight: 60)
+                    .padding(.vertical, 4)
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(items) { item in
+                            QueueRow(item: item)
+                        }
+                    }
+                }
+            }
+            .padding(8)
+        }
+    }
+
+    private func laneStatusLine(_ a: LaneActivitySummary) -> String {
+        var parts: [String] = []
+        if a.running > 0   { parts.append("\(a.running) running") }
+        if a.queued > 0    { parts.append("\(a.queued) queued") }
+        if a.paused > 0    { parts.append("\(a.paused) paused") }
+        if a.completed > 0 { parts.append("\(a.completed) done") }
+        if a.failed > 0    { parts.append("\(a.failed) failed") }
+        if a.stopped > 0   { parts.append("\(a.stopped) stopped") }
+        return parts.isEmpty ? "Idle" : parts.joined(separator: " · ")
     }
 
     // MARK: - Footer
 
     private var footer: some View {
-        HStack {
+        HStack(spacing: 12) {
             Text(footerStatus)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer()
+            if hasAnyActiveOrPausedJob {
+                RunControlView(scope: .global)
+            }
             Button {
                 Task { await startConversion() }
             } label: {
                 if pipeline.isRunning {
                     ProgressView().scaleEffect(0.6).frame(width: 16, height: 16)
-                    Text("Converting…").padding(.leading, 4)
+                    Text("Add to queue").padding(.leading, 4)
                 } else {
                     Image(systemName: "play.fill")
                     Text("Convert").padding(.leading, 2)
                 }
             }
             .keyboardShortcut(.defaultAction)
-            .disabled(pipeline.isRunning || !canStart)
+            .disabled(!canStart)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
         .background(.bar)
+    }
+
+    private var hasAnyActiveOrPausedJob: Bool {
+        pipeline.items.contains {
+            switch $0.lifecycle {
+            case .completed, .failed, .stopped: return false
+            default: return true
+            }
+        }
     }
 
     private var canStart: Bool {
@@ -536,14 +595,18 @@ struct ContentView: View {
     }
 
     private var footerStatus: String {
-        if pipeline.isRunning {
-            let i = pipeline.currentIndex + 1
-            let n = pipeline.items.count
-            let item = pipeline.items[pipeline.currentIndex]
-            return "[\(i)/\(n)] \(item.stage.rawValue) — \(item.displayName)"
+        let fileBusy = pipeline.laneActivity[.file]?.isBusy ?? false
+        let discBusy = pipeline.laneActivity[.disc]?.isBusy ?? false
+        if fileBusy || discBusy {
+            let active = pipeline.items.filter { $0.lifecycle == .running || $0.lifecycle == .pausing }
+            if let first = active.first {
+                let extra = active.count > 1 ? " (+\(active.count - 1) more)" : ""
+                return "\(first.lane.rawValue): \(first.stage.rawValue) — \(first.displayName)\(extra)"
+            }
+            return "Scheduling…"
         }
         if let s = pipeline.summary {
-            return "Last run: \(s.succeeded.count)/\(s.totalCount) succeeded in \(s.elapsedString)"
+            return "Last drain: \(s.succeeded.count)/\(s.totalCount) succeeded in \(s.elapsedString)"
         }
         return tools.status
     }
@@ -662,7 +725,6 @@ struct ContentView: View {
             copyToAppleTVImport: copyToAppleTVForRun
         )
         pipeline.enqueue(sources: sources, outputDirectory: outDir, options: runOptions)
-        await pipeline.run()
     }
 }
 
@@ -670,7 +732,14 @@ struct ContentView: View {
 
 private struct QueueRow: View {
     let item: ConversionItem
-    let isCurrent: Bool
+
+    private var isActive: Bool {
+        item.lifecycle == .running || item.lifecycle == .pausing
+    }
+
+    private var isPaused: Bool {
+        item.lifecycle == .paused
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -679,16 +748,18 @@ private struct QueueRow: View {
                 Text(item.displayName)
                     .font(.system(.body, design: .default))
                 Spacer()
-                Text(item.stage.rawValue)
-                    .font(.caption)
-                    .foregroundStyle(isCurrent ? .primary : .secondary)
+                lifecycleBadge
                 if item.elapsed > 0 {
                     Text(PipelineSummary.format(item.elapsed))
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
+                RunControlView(
+                    scope: .job(item.jobID, lane: item.lane, lifecycle: item.lifecycle),
+                    compact: true
+                )
             }
-            if isCurrent || item.stageProgress > 0 {
+            if isActive || isPaused || item.stageProgress > 0 {
                 ProgressView(value: item.stageProgress)
                     .progressViewStyle(.linear)
                     .tint(progressColor)
@@ -705,7 +776,7 @@ private struct QueueRow: View {
             }
         }
         .padding(10)
-        .background(isCurrent ? Color.accentColor.opacity(0.08) : Color.clear)
+        .background(isActive ? Color.accentColor.opacity(0.08) : Color.clear)
         .overlay(
             RoundedRectangle(cornerRadius: 6)
                 .strokeBorder(.separator, lineWidth: 0.5)
@@ -727,6 +798,27 @@ private struct QueueRow: View {
         default:
             Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(.tint)
         }
+    }
+
+    private var lifecycleBadge: some View {
+        let badge: (String, Color) = {
+            switch item.lifecycle {
+            case .queued:    return ("Queued", .gray)
+            case .running:   return (item.stage.rawValue, .blue)
+            case .pausing:   return ("Pausing", .orange)
+            case .paused:    return ("Paused", .orange)
+            case .stopping:  return ("Stopping", .red)
+            case .stopped:   return ("Stopped", .red)
+            case .completed: return ("Complete", .green)
+            case .failed:    return ("Failed", .red)
+            }
+        }()
+        return Text(badge.0)
+            .font(.caption)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(badge.1.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
     private var progressColor: Color {

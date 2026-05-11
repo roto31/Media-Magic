@@ -1,0 +1,31 @@
+# Compile-only CI for MediaVault (Swift single-target app).
+# Signed releases + GitHub asset upload remain ./build.sh release (local maintainer).
+
+name: MediaVault Swift compile
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: mediavault-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compile sources
+        run: |
+          set -euo pipefail
+          ARCH="$(uname -m)"
+          swiftc -Onone -g \
+            -target "${ARCH}-apple-macosx13.0" \
+            -o /tmp/MediaVaultCI \
+            Sources/MediaVault/*.swift
+          echo "OK: $(file /tmp/MediaVaultCI)"

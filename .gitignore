@@ -1,4 +1,7 @@
 build/
+builds/
 .DS_Store
+# Local agent / IDE scratch (never ship in repo)
+.cursor/
 # Fetched at build time via build.sh (GPLv3 — https://github.com/filebot/scripts)
 ThirdParty/filebot-scripts/
