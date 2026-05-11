@@ -336,6 +336,8 @@ final class ToolManager: ObservableObject {
 
 // MARK: - URLSession download progress delegate
 
+/// **Observer:** URLSession invokes delegate methods on the delegate queue; `onProgress` forwards
+/// download fraction to `ToolManager` on the main actor only — no callback into the session from there.
 private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     let onProgress: @Sendable (Double) -> Void
     init(onProgress: @escaping @Sendable (Double) -> Void) {

@@ -26,6 +26,7 @@ enum PipelineStage: String {
     case ripping   = "Ripping (MakeMKV)"
     case encoding  = "Encoding (HandBrake)"
     case renaming  = "Renaming (FileBot)"
+    case fileBotScript = "FileBot script"
     case tagging   = "Tagging (Subler)"
     case done      = "Complete"
     case failed    = "Failed"
@@ -68,16 +69,62 @@ struct PipelineSummary {
     }
 }
 
+/// Optional post-rename `filebot -script …` step (bundled GPLv3 Groovy or `fn:*` built-ins).
+struct FileBotPostScriptRunOptions: Equatable {
+    let enabled: Bool
+    let descriptorId: String
+    let extraArgsRaw: String
+    let defBlock: String
+    let inputUsesParentFolder: Bool
+}
+
 struct PipelineRunOptions {
     let handBrakePreset: String
     let handBrakeExtraArgs: [String]
     let fileBotDB: String
     let fileBotFormat: String
+    let fileBotEpisodeOrder: String
+    let fileBotApplyArtwork: Bool
     let fileBotExtraArgs: [String]
+    let fileBotPostScript: FileBotPostScriptRunOptions?
     let sublerExtraArgs: [String]
     let skipFileBot: Bool
     let skipSubler: Bool
     let copyToAppleTVImport: Bool
+}
+
+// MARK: - Queued source wire format
+
+/// Typed encoding for special `ConversionItem.sourcePath` values passed from the UI into `PipelineController`.
+enum PipelineQueuedWire: Equatable {
+    /// Prefix before `::` and the MakeMKV rip directory path (must match `bluRayRipDirectoryIfPresent` parsing).
+    static let bluRayRipPendingMarker = "bluray.bluray-pending"
+
+    static func bluRayRipPendingPath(ripDirectoryPath: String) -> String {
+        "\(bluRayRipPendingMarker)::\(ripDirectoryPath)"
+    }
+
+    /// Returns the rip directory when `sourcePath` uses the Blu-ray queued wire form; otherwise `nil`.
+    static func bluRayRipDirectoryIfPresent(in sourcePath: String) throws -> String? {
+        guard sourcePath.hasPrefix("\(bluRayRipPendingMarker)::") else { return nil }
+        let dir = String(sourcePath.dropFirst(bluRayRipPendingMarker.count + 2))
+        guard !dir.isEmpty else {
+            throw NSError(
+                domain: "MediaVault", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid Blu-ray source spec"]
+            )
+        }
+        return dir
+    }
+}
+
+// MARK: - Post-HandBrake steps (Strategy table)
+
+/// One row in the post-HandBrake stage table: skip predicate + async runner (`Behavioural → branching by variant → Strategy`).
+private struct PipelinePostHandBrakeStep {
+    let stageForRun: PipelineStage?
+    let skipMessages: (PipelineRunOptions, ToolManager) -> (note: String, log: String)?
+    let run: @MainActor (PipelineController, Int, String, String) async throws -> String
 }
 
 // MARK: - Controller
@@ -98,7 +145,10 @@ final class PipelineController: ObservableObject {
         handBrakeExtraArgs: [],
         fileBotDB: "TheMovieDB",
         fileBotFormat: "{n} ({y})",
+        fileBotEpisodeOrder: "",
+        fileBotApplyArtwork: false,
         fileBotExtraArgs: ["-non-strict", "--action", "move", "--conflict", "auto"],
+        fileBotPostScript: nil,
         sublerExtraArgs: [],
         skipFileBot: false,
         skipSubler: false,
@@ -187,17 +237,8 @@ final class PipelineController: ObservableObject {
     private func processItem(at index: Int) async throws {
         var workingPath = items[index].sourcePath
 
-        // Stage 1: MakeMKV (Blu-ray only)
-        if workingPath.hasSuffix(".bluray-pending") {
-            // The acquisition step encodes Blu-ray sources with this suffix
-            // followed by the chosen rip directory after a "::" separator.
-            // (See ContentView.swift's source acquisition.)
-            let parts = workingPath.components(separatedBy: "::")
-            guard parts.count == 2 else {
-                throw NSError(domain: "MediaVault", code: 1,
-                              userInfo: [NSLocalizedDescriptionKey: "Invalid Blu-ray source spec"])
-            }
-            let ripDir = parts[1]
+        // Stage 1: MakeMKV (Blu-ray only) — wire form from `PipelineQueuedWire.bluRayRipPendingPath`.
+        if let ripDir = try PipelineQueuedWire.bluRayRipDirectoryIfPresent(in: workingPath) {
             items[index].stage = .ripping
             workingPath = try await runMakeMKV(toFolder: ripDir, item: index)
         }
@@ -217,37 +258,98 @@ final class PipelineController: ObservableObject {
         try await runHandBrake(source: workingPath, outFile: outFile, item: index)
         items[index].finalPath = outFile
 
-        // Stage 3: FileBot
-        items[index].stage = .renaming
-        items[index].stageProgress = 0
-        if runOptions.skipFileBot {
-            items[index].stageNote = "Skipped by run option"
-            log("FileBot skipped by run option")
-        } else if tools.hasFileBot {
-            let renamed = try await runFileBot(input: outFile, item: index)
-            items[index].finalPath = renamed
-        } else {
-            items[index].stageNote = "Skipped — FileBot not installed"
-            log("FileBot not available; skipping rename stage")
+        var mediaPath = outFile
+        for step in postHandBrakeSteps(for: runOptions) {
+            if let skip = step.skipMessages(runOptions, tools) {
+                items[index].stageNote = skip.note
+                log(skip.log)
+                continue
+            }
+            if let st = step.stageForRun {
+                items[index].stage = st
+                items[index].stageProgress = 0
+            }
+            mediaPath = try await step.run(self, index, outFile, mediaPath)
+            items[index].finalPath = mediaPath
+        }
+    }
+
+    private func postHandBrakeSteps(for options: PipelineRunOptions) -> [PipelinePostHandBrakeStep] {
+        var steps: [PipelinePostHandBrakeStep] = []
+
+        steps.append(
+            PipelinePostHandBrakeStep(
+                stageForRun: .renaming,
+                skipMessages: { opt, tools in
+                    if opt.skipFileBot {
+                        return ("Skipped by run option", "FileBot skipped by run option")
+                    }
+                    if !tools.hasFileBot {
+                        return ("Skipped — FileBot not installed", "FileBot not available; skipping rename stage")
+                    }
+                    return nil
+                },
+                run: { ctrl, item, _, mediaPath in
+                    try await ctrl.runFileBot(input: mediaPath, item: item)
+                }
+            )
+        )
+
+        if let ps = options.fileBotPostScript,
+           ps.enabled,
+           !ps.descriptorId.isEmpty,
+           tools.hasFileBot {
+            steps.append(
+                PipelinePostHandBrakeStep(
+                    stageForRun: .fileBotScript,
+                    skipMessages: { _, _ in nil },
+                    run: { ctrl, item, outFile, mediaPath in
+                        let input = ctrl.items[item].finalPath ?? mediaPath
+                        try await ctrl.runFileBotBundledScript(
+                            mediaInputPath: input,
+                            options: ps,
+                            item: item
+                        )
+                        return ctrl.items[item].finalPath ?? input
+                    }
+                )
+            )
         }
 
-        // Stage 4: SublerCli
-        items[index].stage = .tagging
-        items[index].stageProgress = 0
-        if runOptions.skipSubler {
-            items[index].stageNote = "Skipped by run option"
-            log("Subler skipped by run option")
-        } else {
-            try await runSublerCli(input: items[index].finalPath ?? outFile, item: index)
+        steps.append(
+            PipelinePostHandBrakeStep(
+                stageForRun: .tagging,
+                skipMessages: { opt, _ in
+                    if opt.skipSubler {
+                        return ("Skipped by run option", "Subler skipped by run option")
+                    }
+                    return nil
+                },
+                run: { ctrl, item, _, mediaPath in
+                    let input = ctrl.items[item].finalPath ?? mediaPath
+                    try await ctrl.runSublerCli(input: input, item: item)
+                    return ctrl.items[item].finalPath ?? input
+                }
+            )
+        )
+
+        if options.copyToAppleTVImport {
+            steps.append(
+                PipelinePostHandBrakeStep(
+                    stageForRun: nil,
+                    skipMessages: { _, _ in nil },
+                    run: { ctrl, item, _, mediaPath in
+                        ctrl.items[item].stageNote = "Copying to Apple TV auto-import folder…"
+                        let source = ctrl.items[item].finalPath ?? mediaPath
+                        let copiedPath = try ctrl.copyToAppleTVAutoImport(sourcePath: source)
+                        ctrl.log("Copied to Apple TV auto-import: \(copiedPath)")
+                        return copiedPath
+                    }
+                )
+            )
         }
 
-        if runOptions.copyToAppleTVImport {
-            items[index].stageNote = "Copying to Apple TV auto-import folder…"
-            let source = items[index].finalPath ?? outFile
-            let copiedPath = try copyToAppleTVAutoImport(sourcePath: source)
-            items[index].finalPath = copiedPath
-            log("Copied to Apple TV auto-import: \(copiedPath)")
-        }
+        return steps
     }
 
     // MARK: - Stage runners
@@ -371,14 +473,20 @@ final class PipelineController: ObservableObject {
 
         // filebot -rename <file> --db TheMovieDB --format "{n} ({y})" -non-strict
         //         --action move --conflict auto
-        let args = [
+        var args = [
             "-rename", input,
             "--db", runOptions.fileBotDB,
             "--format", runOptions.fileBotFormat,
         ]
+        if !runOptions.fileBotEpisodeOrder.isEmpty {
+            args.append(contentsOf: ["--order", runOptions.fileBotEpisodeOrder])
+        }
+        if runOptions.fileBotApplyArtwork {
+            args.append(contentsOf: ["--apply", "artwork"])
+        }
         let mergedArgs = args + runOptions.fileBotExtraArgs
 
-        items[item].stageNote = "Looking up title on TheMovieDB…"
+        items[item].stageNote = "Looking up metadata (\(runOptions.fileBotDB))…"
         let runStart = Date()
         let inputURL = URL(fileURLWithPath: input)
         let parentDir = inputURL.deletingLastPathComponent()
@@ -416,6 +524,38 @@ final class PipelineController: ObservableObject {
 
         items[item].stageNote = "No rename applied (no match or already named)"
         return input
+    }
+
+    private func runFileBotBundledScript(
+        mediaInputPath: String,
+        options ps: FileBotPostScriptRunOptions,
+        item: Int
+    ) async throws {
+        guard let bin = tools.filebot else { return }
+
+        let inputPath: String = {
+            if ps.inputUsesParentFolder {
+                return (mediaInputPath as NSString).deletingLastPathComponent
+            }
+            return mediaInputPath
+        }()
+
+        items[item].stageNote = "FileBot script (\(ps.descriptorId))…"
+
+        let args = try FileBotScriptLibrary.scriptProcessArguments(
+            descriptorId: ps.descriptorId,
+            inputMediaPath: inputPath,
+            extraArgsRaw: ps.extraArgsRaw,
+            defBlock: ps.defBlock
+        )
+
+        try await runProcess(
+            launch: bin,
+            args: args,
+            stage: .fileBotScript,
+            item: item,
+            parseLine: { _ in nil }
+        )
     }
 
     private func runSublerCli(input: String, item: Int) async throws {

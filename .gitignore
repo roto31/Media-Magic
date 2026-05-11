@@ -1,2 +1,4 @@
 build/
 .DS_Store
+# Fetched at build time via build.sh (GPLv3 — https://github.com/filebot/scripts)
+ThirdParty/filebot-scripts/

@@ -1,0 +1,219 @@
+---
+description: Decision-tree gate for Gang-of-Four patterns. Force pain-point classification (Creational / Structural / Behavioural) before suggesting any named pattern. Primary stack is Swift / SwiftUI / Combine (MediaVault); legacy React/Next.js + Python/FastAPI globs kept for compatibility with prior pattern work.
+globs:
+  - "**/*.swift"
+  - "Sources/**/*"
+  - "**/*.tsx"
+  - "**/*.ts"
+  - "**/app/**/*"
+  - "**/pages/**/*"
+  - "**/components/**/*"
+  - "**/*.py"
+  - "**/api/**/*"
+alwaysApply: true
+---
+
+# Design-Pattern Decision Tree (creation → structure → behaviour)
+
+Before suggesting, naming, adding, or refactoring toward a Gang-of-Four–style
+pattern, **stop and classify the pain into exactly one root branch**:
+
+1. **Creation pain** — complex constructors, conditional instantiation,
+   unclear defaults, scattered `init(...)`/`new`/factory calls, half-built
+   objects escaping construction.
+2. **Structure pain** — leaking interfaces, awkward subsystem boundaries,
+   external API shapes appearing inside domain logic, composition issues,
+   callers reaching through many steps to one subsystem.
+3. **Behaviour pain** — accumulating conditionals (`if`/`switch`) keyed by
+   variant, algorithms/policies swapped at runtime, unstable algorithm choice,
+   mode-dependent behaviour with implicit transitions.
+
+If the symptom does not fit one branch in plain language, **do not name a
+pattern**. Describe the symptom and stop.
+
+---
+
+## Hard rules (must be enforced, no exceptions)
+
+- **Pain-first**: Every pattern suggestion MUST quote the concrete code symptom
+  it resolves. Reject any suggestion that begins with "we should use X" without
+  a named pain point.
+- **Branch trace required**: Every pattern suggestion MUST cite its branch
+  (e.g., "Behavioural → branching on type/mode → Strategy"). A pattern with
+  no traceable branch is **rejected**.
+- **One branch per pain**: Do not mix branches. Two distinct pains require two
+  distinct branch traces.
+- **Reject orphans**: Reject Singleton-for-convenience, Decorator-as-
+  registration-wrapper, Factory-because-OOP, Visitor-for-CRUD,
+  Strategy-as-single-implementation-interface (YAGNI until branching appears).
+- **Invariants per category** (see "Pattern invariants" below) MUST be checked
+  before code lands.
+
+---
+
+## Pattern detection triggers (observable code signals → branch)
+
+When you see the signal below, walk the matching branch — do not skip ahead.
+
+| Code signal (observable) | Branch | Candidate patterns |
+| --- | --- | --- |
+| `init(...)` with **7+ parameters** or many optional flags | Creational | **Builder** (or parameter object) |
+| `if vendor == "A" { ... } else if vendor == "B" ...` repeating across files | Creational + Behavioural | **Factory** (constructs) + **Strategy** (dispatch) |
+| Same `init` body called from many sites with slight variation | Creational | **Factory Method** |
+| Static `shared` accessed for "easy global access" without lifecycle rationale | Creational (**anti-pattern**) | **Replace** with initializer DI |
+| External API JSON / DTO types referenced inside `View`s or domain models | Structural | **Adapter** at boundary |
+| Caller invokes 4+ subsystem APIs in sequence to do one logical thing | Structural | **Facade** |
+| Caller threads optional behaviour through nested wrappers that share state | Structural (**anti-pattern**) | **Stop** — collapse to Strategy/composition |
+| Cross-cutting concern (auth, logging, retry) duplicated at call sites | Structural | **Decorator** / middleware chain |
+| Expensive resource shared by many readers with stable intrinsic data | Structural | **Flyweight** |
+| `switch enumValue { ... }` repeated in 3+ files with the same cases | Behavioural | **Strategy** (or polymorphic enum methods) |
+| Object’s allowed operations depend on its current mode; transitions implicit | Behavioural | **State** |
+| Multiple observers must react when a value changes | Behavioural | **Observer** (Swift: `@Published`, property observers, Combine) |
+| Sequential request handling with optional short-circuit per handler | Behavioural | **Chain of Responsibility** |
+| Operation that must be undoable, queueable, or retryable | Behavioural | **Command** (Swift: closure or `struct` with `run()`) |
+| Algorithm skeleton fixed, individual steps vary | Behavioural | **Template Method** / hook closure |
+| Many components mutate or read shared state | Behavioural | **Mediator** (sparingly) — prefer scoped DI / context |
+| Tree of heterogeneous nodes processed uniformly | Behavioural | **Visitor** (rare in app code — justify) |
+
+If a signal is absent, the corresponding pattern MUST NOT be suggested.
+
+---
+
+## Pattern invariants (must hold for the suggestion to be valid)
+
+### Creational
+- **Builder** validates required fields **before** the object is returned.
+  No half-built instances escape construction. In Swift this means the
+  build step is `throws` or returns `Result<T, Error>`; partial state is
+  inaccessible outside the builder.
+- **Factory** hides choice of concrete implementation. The caller depends on
+  the abstract type (protocol / enum result), not the concrete one.
+- **Singleton** is only acceptable for a **bounded** resource with explicit
+  lifecycle (e.g., `URLSession.shared`, app-wide cache). "Easy access" is not
+  a rationale.
+
+### Structural
+- **Adapter contains only translation logic** — no business rules, no
+  validation beyond shape conformance, no logging beyond debug. Domain rules
+  live in the domain layer.
+- **Facade is one-way and read-mostly** — it exposes a small, intention-named
+  surface and forwards. It does not add domain decisions of its own.
+- **Decorator** chains must not share mutable state across wrappers. If they
+  do, the chain is a bug masquerading as composition — collapse to Strategy.
+
+### Behavioural
+- **Strategy** must **eliminate branching**, not wrap it. If the chosen
+  strategy contains its own `switch` over the variant, the refactor failed.
+- **State** is only used when both modes **and** transitions are explicitly
+  modelled (enum-of-states with allowed-transition table). Boolean flags
+  that imply mode are insufficient.
+- **Observer** must not produce circular notification chains. Document the
+  emit/receive direction next to the publisher.
+- **Chain of Responsibility** handlers must each declare their own
+  short-circuit condition; no implicit "handler 3 always runs last."
+
+---
+
+## Framework-specific guidance
+
+### Swift / SwiftUI / Combine (PRIMARY — MediaVault)
+
+- **Adapter** → use **protocols** at module boundaries (e.g., a `MediaToolRunner`
+  protocol bridging `Process`-launched CLIs into the domain). Implementation
+  contains argv translation only, never policy.
+- **Strategy** → prefer **closures** (`@Sendable @escaping`) or
+  **type-safe enums** for finite variants. `enum SourceKind` + a method on
+  the enum is the idiomatic Swift Strategy when variants are stable. Use a
+  protocol-typed property only when behaviour ships from outside the module.
+- **Factory** → expose a `static func make(...) -> Self` or a free function
+  returning a protocol-typed value. **Initializer DI** (passing dependencies
+  through `init`) is the default; avoid service locators and global
+  `shared` accessors.
+- **Command** → a `struct` conforming to `Sendable` with a single `run()
+  async throws -> Output`. Closures are acceptable for one-shot commands;
+  promote to `struct` when state or identity is needed (history, undo).
+- **Observer** → Swift property observers (`willSet`/`didSet`),
+  `@Published` + `ObservableObject`, or Combine `Publisher`. Reserve
+  `NotificationCenter` for OS-level events; do not invent app-internal
+  notifications when `@Published` suffices.
+- **State** → an `enum` whose cases carry associated values for stage-local
+  data (mirrors `enum PipelineStage` in this codebase). Transitions must be
+  centralized in the owning `@MainActor` view model.
+- **Facade** → a `final class` or `enum` of static methods that wraps a noisy
+  subsystem (mirrors `FileBotScriptLibrary` and `Process.runShell` in this
+  codebase). Returns domain types, hides the subsystem types entirely.
+- **Builder** → a value-type `struct` with chainable `with…(…) -> Self`
+  methods and a terminal `build() throws -> Output`. Only use when ≥7
+  inputs or conditional inclusion of fields exists; otherwise pass a
+  parameter `struct` directly (mirrors `PipelineRunOptions`).
+- **Mediator** → **avoid** in favour of `@EnvironmentObject` view-tree
+  injection or initializer-injected coordinators. A "god view model" is
+  the anti-pattern.
+
+### React / Next.js (legacy compatibility)
+- React Context as **Mediator**; custom hooks as **Strategy**;
+  component composition as **Decorator**. Preserve Server/Client boundaries.
+- Adapters live at data-fetch / service modules; behavioural variation via
+  hooks or strategy components, never duplicated page logic.
+
+### Python / FastAPI (legacy compatibility)
+- FastAPI `Depends()` as **Factory / Service Locator** entry point.
+- Pydantic models as **value objects** at the boundary; do not let them carry
+  domain methods.
+- Middleware as **Chain of Responsibility**.
+- Routers orchestrate only; behavioural variation lives in injected services.
+
+---
+
+## Codebase-aware enforcement (MediaVault specifics)
+
+This codebase already follows these conventions. New code MUST match:
+
+- **Stateful view models**: `@MainActor final class X: ObservableObject` with
+  `@Published` properties. DI via initializer (`init(tools: ToolManager)`).
+- **Domain value types**: `struct` / `enum` with `Equatable` (and `Codable` /
+  `Identifiable` where persistence or list iteration is needed).
+- **Errors**: domain `enum FooError: Error, LocalizedError` with a localized
+  `errorDescription`. Ad-hoc throws use
+  `NSError(domain: "MediaVault", code: <int>, userInfo: [NSLocalizedDescriptionKey: "…"])`.
+- **Settings persistence**: `private enum Keys { static let … }` raw-string
+  keys; `@Published var x { didSet { save(Keys.x, x) } }` against
+  `UserDefaults`.
+- **Closure-strategy**: long-running process drivers accept
+  `@Sendable @escaping` closures for variant parsing (see
+  `PipelineController.runProcess(..., parseLine:)`). Prefer this over a
+  protocol when the strategy is local to one call.
+- **No new singletons**. No service locators. No property-wrapper DI
+  frameworks.
+- **Naming**: domain prefix when the type belongs to a tool integration
+  (`FileBot…`, `HandBrake…`, `Subler…`, `MakeMKV…`, `Pipeline…`).
+
+---
+
+## Rejection prompts (the AI MUST refuse to proceed)
+
+- "Let's add a Singleton for convenience." → **Reject**. Initializer DI.
+- "Wrap the API client in a Decorator for logging and retry." → **Reject**
+  unless the decorators are independent and stateless; otherwise collapse.
+- "Use a Strategy here." (without naming the conditional that disappears) →
+  **Reject**. Quote the `if`/`switch` that the Strategy replaces.
+- "Convert this enum to a State pattern." (without listing transitions) →
+  **Reject**. Provide the transition table first.
+- "Adapter that also validates business rules." → **Reject**. Move rules to
+  the domain; Adapter stays shape-only.
+
+---
+
+## Output discipline (when proposing or applying a pattern)
+
+Every pattern proposal MUST include, in this order:
+
+1. **Pain point**, quoted from the code (file:line if available).
+2. **Branch trace** (Creational / Structural / Behavioural → sub-decision).
+3. **Pattern name** chosen.
+4. **Swift implementation sketch** matching this codebase's conventions.
+5. **Invariant check**: explicitly confirm the per-category invariants hold.
+6. **Rejection check**: confirm no listed anti-pattern applies.
+
+Suggestions that omit any of (1)–(6) are non-conforming and MUST be revised
+or withdrawn.
