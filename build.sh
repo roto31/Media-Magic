@@ -140,6 +140,22 @@ echo "▸ Preparing build directory: $BUILD_DIR"
 mkdir -p "${APP}/Contents/MacOS"
 mkdir -p "${APP}/Contents/Resources"
 
+# FileBot Groovy script library (GPLv3) — https://github.com/filebot/scripts
+FILEBOT_VENDOR="${SCRIPT_DIR}/ThirdParty/filebot-scripts"
+if [[ ! -f "${FILEBOT_VENDOR}/amc.groovy" ]]; then
+    echo "▸ Cloning FileBot scripts library (requires git + network)"
+    mkdir -p "${SCRIPT_DIR}/ThirdParty"
+    git clone --depth 1 https://github.com/filebot/scripts.git "${FILEBOT_VENDOR}"
+fi
+echo "▸ Copying FileBot scripts into app bundle"
+mkdir -p "${APP}/Contents/Resources/FileBotScripts"
+cp "${FILEBOT_VENDOR}/LICENSE" "${FILEBOT_VENDOR}/README.md" "${APP}/Contents/Resources/FileBotScripts/"
+shopt -s nullglob
+for f in "${FILEBOT_VENDOR}"/*.groovy; do
+    cp "$f" "${APP}/Contents/Resources/FileBotScripts/"
+done
+shopt -u nullglob
+
 # Compile all .swift files into a single binary
 echo "▸ Compiling Swift sources ($CONFIG)"
 swiftc "${SWIFT_FLAGS[@]}" \

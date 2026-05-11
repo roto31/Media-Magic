@@ -12,8 +12,15 @@
 import SwiftUI
 import AppKit
 
+private enum BatchProfileSelection: Hashable {
+    case settingsDefaults
+    case custom
+    case preset(UUID)
+}
+
 struct ContentView: View {
-    @StateObject private var settings = AppSettings()
+    @EnvironmentObject private var settings: AppSettings
+    @EnvironmentObject private var presetStore: AutomationPresetStore
     @StateObject private var tools = ToolManager()
     @StateObject private var pipeline: PipelineController
 
@@ -23,11 +30,26 @@ struct ContentView: View {
     @State private var ripDir: URL?            // for Blu-ray intermediate
     @State private var dvdDevicePath: String = ""
     @State private var setupError: String?
-    @State private var showSettings: Bool = false
     @State private var skipFileBotForRun: Bool = false
     @State private var skipSublerForRun: Bool = false
     @State private var copyToAppleTVForRun: Bool = false
     @State private var didApplySettingsDefaults: Bool = false
+    @State private var batchProfile: BatchProfileSelection = .settingsDefaults
+    @State private var runAuto = RunAutomationFields(
+        fileBotDB: "TheMovieDB",
+        fileBotFormat: "{n} ({y})",
+        fileBotEpisodeOrder: "",
+        fileBotApplyArtwork: false,
+        fileBotExtraArgs: "-non-strict --action move --conflict auto",
+        postScriptEnabled: false,
+        postScriptDescriptorId: "",
+        postScriptExtraArgs: "",
+        postScriptDefBlock: "",
+        postScriptInputIsParentFolder: false
+    )
+    @State private var didHydrateAutomationFields = false
+    @State private var saveBatchPresetName = ""
+    @State private var showSaveBatchPresetAlert = false
 
     init() {
         let t = ToolManager()
@@ -88,9 +110,6 @@ struct ContentView: View {
                 }
             }
         }
-        .sheet(isPresented: $showSettings) {
-            SettingsView(settings: settings)
-        }
         .overlay {
             if tools.isPreparing {
                 preparingOverlay
@@ -114,7 +133,11 @@ struct ContentView: View {
             }
             Spacer()
             Button {
-                showSettings = true
+                NSApplication.shared.sendAction(
+                    Selector(("showSettingsWindow:")),
+                    to: nil,
+                    from: nil
+                )
             } label: {
                 Image(systemName: "gearshape")
             }
@@ -182,7 +205,145 @@ struct ContentView: View {
 
                 outputDirPicker
                 Divider()
+                automationCard
+                Divider()
                 runOptionsSection
+            }
+            .padding(8)
+        }
+        .onAppear {
+            if !didHydrateAutomationFields {
+                runAuto = RunAutomationFields(from: settings)
+                didHydrateAutomationFields = true
+            }
+        }
+        .onChange(of: batchProfile, perform: handleBatchProfileChange)
+        .alert("Save batch preset", isPresented: $showSaveBatchPresetAlert) {
+            TextField("Preset name", text: $saveBatchPresetName)
+            Button("Save") {
+                let name = saveBatchPresetName.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty else { return }
+                presetStore.save(runAuto.asPreset(name: name))
+                saveBatchPresetName = ""
+            }
+            Button("Cancel", role: .cancel) {
+                saveBatchPresetName = ""
+            }
+        } message: {
+            Text("Stores FileBot rename options and optional script automation for reuse.")
+        }
+    }
+
+    private func handleBatchProfileChange(_ new: BatchProfileSelection) {
+        switch new {
+        case .settingsDefaults:
+            runAuto = RunAutomationFields(from: settings)
+        case .custom:
+            break
+        case .preset(let id):
+            if let p = presetStore.preset(id: id) {
+                runAuto = RunAutomationFields(from: p)
+            }
+        }
+    }
+
+    private var databasePickerRunAuto: Binding<FileBotDatabaseChoice> {
+        Binding(
+            get: { FileBotDatabaseChoice.matchingStored(runAuto.fileBotDB) },
+            set: { choice in
+                if choice != .custom {
+                    runAuto.fileBotDB = choice.rawValue
+                }
+            }
+        )
+    }
+
+    private var episodeOrderRunAuto: Binding<FileBotEpisodeOrder> {
+        Binding(
+            get: {
+                if runAuto.fileBotEpisodeOrder.isEmpty { return .notSpecified }
+                return FileBotEpisodeOrder(rawValue: runAuto.fileBotEpisodeOrder) ?? .notSpecified
+            },
+            set: { runAuto.fileBotEpisodeOrder = $0.rawValue }
+        )
+    }
+
+    private var automationCard: some View {
+        GroupBox(label: Label("Automation (this batch)", systemImage: "gearshape.2")) {
+            VStack(alignment: .leading, spacing: 10) {
+                Picker("Batch profile", selection: $batchProfile) {
+                    Text("Use Settings defaults").tag(BatchProfileSelection.settingsDefaults)
+                    Text("Custom (fields below)").tag(BatchProfileSelection.custom)
+                    ForEach(presetStore.presets) { p in
+                        Text(p.name).tag(BatchProfileSelection.preset(p.id))
+                    }
+                }
+                Text("Choose a saved preset or edit fields before Convert — same CLI parameters as FileBot.app / filebot CLI.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                GroupBox("FileBot rename") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Picker("Database", selection: databasePickerRunAuto) {
+                            ForEach(FileBotDatabaseChoice.allCases) { choice in
+                                Text(choice.menuLabel).tag(choice)
+                            }
+                        }
+                        if FileBotDatabaseChoice.matchingStored(runAuto.fileBotDB) == .custom {
+                            TextField("Custom --db value", text: $runAuto.fileBotDB)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        TextField("Format (--format)", text: $runAuto.fileBotFormat)
+                            .textFieldStyle(.roundedBorder)
+                        Picker("Episode order (--order)", selection: episodeOrderRunAuto) {
+                            ForEach(FileBotEpisodeOrder.allCases) { order in
+                                Text(order.menuLabel).tag(order)
+                            }
+                        }
+                        Toggle("Also fetch artwork files (--apply artwork)", isOn: $runAuto.fileBotApplyArtwork)
+                        TextField("Extra args (space-separated)", text: $runAuto.fileBotExtraArgs)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    .padding(8)
+                }
+
+                GroupBox("Optional FileBot script (after rename)") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle("Run Groovy script via filebot -script", isOn: $runAuto.postScriptEnabled)
+                        Picker("Script", selection: $runAuto.postScriptDescriptorId) {
+                            Text("None").tag("")
+                            ForEach(FileBotScriptLibrary.allDescriptors()) { d in
+                                Text(d.title).tag(d.id)
+                            }
+                        }
+                        .disabled(!runAuto.postScriptEnabled)
+                        TextField("Extra script args (space-separated)", text: $runAuto.postScriptExtraArgs)
+                            .textFieldStyle(.roundedBorder)
+                            .disabled(!runAuto.postScriptEnabled)
+                        Text("--def lines (key=value per line, optional)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextEditor(text: $runAuto.postScriptDefBlock)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(minHeight: 72)
+                            .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color(nsColor: .separatorColor)))
+                            .disabled(!runAuto.postScriptEnabled)
+                        Toggle(
+                            "Pass parent folder of the media file as script input (vs file path)",
+                            isOn: $runAuto.postScriptInputIsParentFolder
+                        )
+                        .disabled(!runAuto.postScriptEnabled)
+                    }
+                    .padding(8)
+                }
+
+                HStack {
+                    Button("Save batch fields as preset…") {
+                        saveBatchPresetName = ""
+                        showSaveBatchPresetAlert = true
+                    }
+                    .disabled(pipeline.isRunning)
+                }
             }
             .padding(8)
         }
@@ -213,6 +374,9 @@ struct ContentView: View {
                         .truncationMode(.middle)
                 }
             }
+            Text("Multiple files are queued in order (e.g. TV episode batches).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -466,18 +630,32 @@ struct ContentView: View {
         case .dvd:
             sources = [dvdDevicePath]
         case .bluray:
-            // Encode the rip folder into the source spec; the controller
-            // detects the .bluray-pending suffix and runs MakeMKV first.
+            // Encode the rip folder into the source spec; `PipelineController` parses
+            // `PipelineQueuedWire.bluRayRipPendingMarker` + `::` + rip directory before HandBrake.
             guard let rd = ripDir else { return }
             sources = ["bluray.bluray-pending::\(rd.path)"]
         }
 
+        let postScriptOpts: FileBotPostScriptRunOptions? = {
+            guard runAuto.postScriptEnabled, !runAuto.postScriptDescriptorId.isEmpty else { return nil }
+            return FileBotPostScriptRunOptions(
+                enabled: true,
+                descriptorId: runAuto.postScriptDescriptorId,
+                extraArgsRaw: runAuto.postScriptExtraArgs,
+                defBlock: runAuto.postScriptDefBlock,
+                inputUsesParentFolder: runAuto.postScriptInputIsParentFolder
+            )
+        }()
+
         let runOptions = PipelineRunOptions(
             handBrakePreset: settings.handBrakePreset,
             handBrakeExtraArgs: settings.args(from: settings.handBrakeExtraArgs),
-            fileBotDB: settings.fileBotDB,
-            fileBotFormat: settings.fileBotFormat,
-            fileBotExtraArgs: settings.args(from: settings.fileBotExtraArgs),
+            fileBotDB: runAuto.fileBotDB,
+            fileBotFormat: runAuto.fileBotFormat,
+            fileBotEpisodeOrder: runAuto.fileBotEpisodeOrder,
+            fileBotApplyArtwork: runAuto.fileBotApplyArtwork,
+            fileBotExtraArgs: settings.args(from: runAuto.fileBotExtraArgs),
+            fileBotPostScript: postScriptOpts,
             sublerExtraArgs: settings.args(from: settings.sublerExtraArgs),
             skipFileBot: skipFileBotForRun,
             skipSubler: skipSublerForRun,
@@ -485,64 +663,6 @@ struct ContentView: View {
         )
         pipeline.enqueue(sources: sources, outputDirectory: outDir, options: runOptions)
         await pipeline.run()
-    }
-}
-
-private struct SettingsView: View {
-    @ObservedObject var settings: AppSettings
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Settings")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            GroupBox("HandBrake") {
-                VStack(alignment: .leading, spacing: 8) {
-                    TextField("Preset", text: $settings.handBrakePreset)
-                    TextField("Extra args (space-separated)", text: $settings.handBrakeExtraArgs)
-                        .textFieldStyle(.roundedBorder)
-                }
-                .padding(8)
-            }
-
-            GroupBox("FileBot") {
-                VStack(alignment: .leading, spacing: 8) {
-                    TextField("Database", text: $settings.fileBotDB)
-                    TextField("Format", text: $settings.fileBotFormat)
-                    TextField("Extra args (space-separated)", text: $settings.fileBotExtraArgs)
-                        .textFieldStyle(.roundedBorder)
-                }
-                .padding(8)
-            }
-
-            GroupBox("Subler") {
-                VStack(alignment: .leading, spacing: 8) {
-                    TextField("Extra args (space-separated)", text: $settings.sublerExtraArgs)
-                        .textFieldStyle(.roundedBorder)
-                }
-                .padding(8)
-            }
-
-            GroupBox("Defaults") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Toggle("Default: Skip FileBot", isOn: $settings.defaultSkipFileBot)
-                    Toggle("Default: Skip Subler", isOn: $settings.defaultSkipSubler)
-                    Toggle("Default: Copy completed file to Apple TV auto-import folder", isOn: $settings.defaultCopyToAppleTVImport)
-                    Toggle("Force first-run setup on next launch (re-download HandBrakeCLI)", isOn: $settings.forceFirstRunSetupOnNextLaunch)
-                }
-                .padding(8)
-            }
-
-            HStack {
-                Spacer()
-                Button("Done") { dismiss() }
-                    .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(20)
-        .frame(width: 640)
     }
 }
 
@@ -602,6 +722,8 @@ private struct QueueRow: View {
             Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
         case .idle:
             Image(systemName: "circle").foregroundStyle(.secondary)
+        case .fileBotScript:
+            Image(systemName: "curlybraces").foregroundStyle(.teal)
         default:
             Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(.tint)
         }
@@ -612,6 +734,7 @@ private struct QueueRow: View {
         case .ripping:  return .purple
         case .encoding: return .accentColor
         case .renaming: return .orange
+        case .fileBotScript: return .teal
         case .tagging:  return .green
         default:        return .accentColor
         }
