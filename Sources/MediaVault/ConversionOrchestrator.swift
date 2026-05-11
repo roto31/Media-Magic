@@ -1019,6 +1019,16 @@ actor ConversionOrchestrator {
                     }
                 }
             }
+            // EOF: many CLIs print errors without a trailing newline; those bytes
+            // would otherwise never reach `acceptLine` (hypothesis H9).
+            if !buffer.isEmpty {
+                let tail = String(decoding: buffer, as: UTF8.self)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !tail.isEmpty {
+                    let pct = parseLine(tail)
+                    await self?.acceptLine(tail, progress: pct, id: id, logProcess: logProcess)
+                }
+            }
         }
     }
 

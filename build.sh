@@ -79,7 +79,7 @@ package_release_asset() {
 
 sign_release_app() {
     local matched_identity
-    matched_identity="$(security find-identity -v -p codesigning 2>/dev/null | rg -F "$DEVELOPER_ID_APPLICATION" -m 1 || true)"
+    matched_identity="$(security find-identity -v -p codesigning 2>/dev/null | grep -F "$DEVELOPER_ID_APPLICATION" | head -n 1 || true)"
     if [[ -z "$matched_identity" ]]; then
         echo "ERROR: Developer ID identity not found: $DEVELOPER_ID_APPLICATION" >&2
         echo "Install/import the certificate, or override with DEVELOPER_ID_APPLICATION." >&2
@@ -217,14 +217,15 @@ PLIST
 # Gatekeeper prompt on the build machine.
 xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
 
-# Persist the latest successful build number only after a successful build.
-printf '%s\n' "$BUILD_NUMBER" > "$BUILD_NUMBER_FILE"
-
 if [[ "$CONFIG" == "release" ]]; then
     sign_release_app
     package_release_asset
     upload_release_asset
 fi
+
+# Persist build number only after all steps above succeed (release signing
+# and upload must not leave a skipped counter gap on failure).
+printf '%s\n' "$BUILD_NUMBER" > "$BUILD_NUMBER_FILE"
 
 # Sanity report
 echo ""
