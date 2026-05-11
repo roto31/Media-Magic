@@ -1,5 +1,5 @@
 ---
-description: Decision-tree gate for Gang-of-Four patterns. Force pain-point classification (Creational / Structural / Behavioural) before suggesting any named pattern. Primary stack is Swift / SwiftUI / Combine (MediaVault); legacy React/Next.js + Python/FastAPI globs kept for compatibility with prior pattern work.
+description: Decision-tree gate for Gang-of-Four patterns. Force pain-point classification (Creational / Structural / Behavioural) before suggesting any named pattern. Primary stack is Swift / SwiftUI / Combine (Media Magic); legacy React/Next.js + Python/FastAPI globs kept for compatibility with prior pattern work.
 globs:
   - "**/*.swift"
   - "Sources/**/*"
@@ -116,7 +116,7 @@ If a signal is absent, the corresponding pattern MUST NOT be suggested.
 
 ## Framework-specific guidance
 
-### Swift / SwiftUI / Combine (PRIMARY — MediaVault)
+### Swift / SwiftUI / Combine (PRIMARY — Media Magic)
 
 - **Adapter** → use **protocols** at module boundaries (e.g., a `MediaToolRunner`
   protocol bridging `Process`-launched CLIs into the domain). Implementation
@@ -165,7 +165,7 @@ If a signal is absent, the corresponding pattern MUST NOT be suggested.
 
 ---
 
-## Codebase-aware enforcement (MediaVault specifics)
+## Codebase-aware enforcement (Media Magic specifics)
 
 This codebase already follows these conventions. New code MUST match:
 
@@ -175,7 +175,7 @@ This codebase already follows these conventions. New code MUST match:
   `Identifiable` where persistence or list iteration is needed).
 - **Errors**: domain `enum FooError: Error, LocalizedError` with a localized
   `errorDescription`. Ad-hoc throws use
-  `NSError(domain: "MediaVault", code: <int>, userInfo: [NSLocalizedDescriptionKey: "…"])`.
+  `NSError(domain: "MediaMagic", code: <int>, userInfo: [NSLocalizedDescriptionKey: "…"])`.
 - **Settings persistence**: `private enum Keys { static let … }` raw-string
   keys; `@Published var x { didSet { save(Keys.x, x) } }` against
   `UserDefaults`.

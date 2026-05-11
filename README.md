@@ -1,6 +1,6 @@
 # Media-Magic
 
-Media-Magic is a native macOS SwiftUI app (`MediaVault`) that orchestrates a
+Media-Magic is a native macOS SwiftUI app (**Media Magic**) that orchestrates a
 multi-stage conversion pipeline for movie/disc workflows:
 
 - MakeMKV (Blu-ray only)
@@ -14,8 +14,8 @@ fallback path.
 ## Repository Layout
 
 ```text
-Sources/MediaVault/
-  MediaVaultApp.swift
+Sources/MediaMagic/
+  MediaMagicApp.swift
   ContentView.swift
   PipelineController.swift
   ConversionOrchestrator.swift
@@ -30,10 +30,10 @@ build.sh
 MediaConversionPipeline.sh
 LaunchMediaPipeline.applescript
 docs/
-  MEDIAVAULT_ORCHESTRATION.md   # deep-dive: lanes, persistence, diagrams
+  MEDIA_MAGIC_ORCHESTRATION.md   # deep-dive: lanes, persistence, diagrams
   BUILD_PROCESS.md
 .github/workflows/
-  mediavault.yml                 # compile-only CI on push/PR
+  media-magic.yml                 # compile-only CI on push/PR
 ```
 
 ## Architecture
@@ -56,7 +56,7 @@ flowchart TD
     PC --> Summary["Run summary when queue drains"]
 ```
 
-Full diagrams (state machine, sequences, ER sketch): [docs/MEDIAVAULT_ORCHESTRATION.md](docs/MEDIAVAULT_ORCHESTRATION.md).
+Full diagrams (state machine, sequences, ER sketch): [docs/MEDIA_MAGIC_ORCHESTRATION.md](docs/MEDIA_MAGIC_ORCHESTRATION.md).
 
 ## End-To-End Pipeline Flow
 
@@ -158,16 +158,16 @@ chmod +x build.sh
 ./build.sh release
 # optional compatibility alias:
 ./build.sh release sign
-open builds/<semver>+<build_number>/MediaVault.app
+open builds/<semver>+<build_number>/MediaMagic.app
 ```
 
 ## Build And Release Process
 
 Release builds are now **signed-only GitHub distribution** builds:
 
-- Build output is created under `builds/<VERSION>+<BUILD_NUMBER>/MediaVault.app`
+- Build output is created under `builds/<VERSION>+<BUILD_NUMBER>/MediaMagic.app`
 - App is signed with Developer ID Application identity
-- App is zipped as `MediaVault-<VERSION>+<BUILD_NUMBER>-macOS.zip`
+- App is zipped as `MediaMagic-<VERSION>+<BUILD_NUMBER>-macOS.zip`
 - GitHub Release is created/updated for tag `<VERSION>+<BUILD_NUMBER>`
 - Release asset is uploaded automatically (`gh release upload --clobber`)
 
@@ -188,14 +188,14 @@ flowchart TD
     UploadAsset --> DoneBuild["Release build complete"]
 ```
 
-Optional pre-release flag: `MEDIAVAULT_PRERELEASE=1 ./build.sh release` passes `--prerelease` to `gh` while keeping the tag as `<VERSION>+<BUILD_NUMBER>` (see `docs/BUILD_PROCESS.md`).
+Optional pre-release flag: `MEDIA_MAGIC_PRERELEASE=1 ./build.sh release` passes `--prerelease` to `gh` while keeping the tag as `<VERSION>+<BUILD_NUMBER>` (see `docs/BUILD_PROCESS.md`).
 
-CI: `.github/workflows/mediavault.yml` runs a **compile-only** check on push/PR; it does not replace `./build.sh release`.
+CI: `.github/workflows/media-magic.yml` runs a **compile-only** check on push/PR; it does not replace `./build.sh release`.
 
 Distribution note:
 - This mode is signed but **not notarized**.
 - Some machines may still require first-open allowance (right-click Open), or:
-  - `xattr -dr com.apple.quarantine MediaVault.app`
+  - `xattr -dr com.apple.quarantine MediaMagic.app`
 
 Detailed build documentation: `docs/BUILD_PROCESS.md`
 
@@ -207,7 +207,7 @@ Media-Magic uses [Semantic Versioning 2.0.0](https://semver.org):
 - `BUILD_NUMBER` stores the last successful numeric build number.
 - `build.sh` increments `BUILD_NUMBER` on each successful build.
 - Each build writes immutable artifacts into:
-  - `builds/<MAJOR.MINOR.PATCH>+<BUILD_NUMBER>/MediaVault.app`
+  - `builds/<MAJOR.MINOR.PATCH>+<BUILD_NUMBER>/MediaMagic.app`
 
 For Apple bundle metadata:
 
@@ -231,7 +231,7 @@ Release cadence guidance:
 - `HandBrakeCLI`:
   - Uses existing system install if present.
   - Otherwise downloads pinned release DMG and installs binary into
-    `~/Library/Application Support/MediaVault/bin/`.
+    `~/Library/Application Support/MediaMagic/bin/`.
 - `SublerCli`:
   - Resolved from common paths; if missing, app prompts install guidance.
 - `MakeMKV`:

@@ -2,7 +2,7 @@
 // Locates or downloads CLI tools used by the pipeline.
 //
 // HandBrakeCLI and SublerCli are auto-downloaded on first launch into
-// ~/Library/Application Support/MediaVault/bin/  (no Homebrew required).
+// ~/Library/Application Support/MediaMagic/bin/  (no Homebrew required).
 // Both tools are GPLv2; we don't bundle them inside the .app to keep the
 // app's own redistribution clean — instead we fetch the official binaries
 // the same way Homebrew does, which is functionally identical to the user
@@ -103,16 +103,16 @@ final class ToolManager: ObservableObject {
 
     // MARK: - Application Support directory
 
-    /// ~/Library/Application Support/MediaVault/
+    /// ~/Library/Application Support/MediaMagic/
     static var supportDir: URL {
         let base = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first!
-        return base.appendingPathComponent("MediaVault", isDirectory: true)
+        return base.appendingPathComponent("MediaMagic", isDirectory: true)
     }
 
-    /// ~/Library/Application Support/MediaVault/bin/
+    /// ~/Library/Application Support/MediaMagic/bin/
     static var binDir: URL {
         supportDir.appendingPathComponent("bin", isDirectory: true)
     }
@@ -277,7 +277,7 @@ final class ToolManager: ObservableObject {
             }
             // Move to a stable location — the system reaps the temp URL fast.
             let stable = FileManager.default.temporaryDirectory
-                .appendingPathComponent("MediaVault_\(UUID().uuidString)_\(url.lastPathComponent)")
+                .appendingPathComponent("MediaMagic_\(UUID().uuidString)_\(url.lastPathComponent)")
             try FileManager.default.moveItem(at: tempURL, to: stable)
             session.invalidateAndCancel()
             return stable

@@ -72,7 +72,7 @@ enum FileBotScriptLibrary {
     ) throws -> [String] {
         guard let d = descriptor(withId: descriptorId, bundle: bundle) else {
             throw NSError(
-                domain: "MediaVault", code: 10,
+                domain: "MediaMagic", code: 10,
                 userInfo: [NSLocalizedDescriptionKey: "Unknown FileBot script: \(descriptorId)"]
             )
         }

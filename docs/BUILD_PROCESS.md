@@ -27,9 +27,9 @@ Build ID format:
 For each successful build:
 
 - App bundle:
-  - `builds/<BUILD_ID>/MediaVault.app`
+  - `builds/<BUILD_ID>/MediaMagic.app`
 - Release zip:
-  - `builds/<BUILD_ID>/MediaVault-<BUILD_ID>-macOS.zip`
+  - `builds/<BUILD_ID>/MediaMagic-<BUILD_ID>-macOS.zip`
 
 ## End-To-End Build Flow
 
@@ -76,7 +76,7 @@ sequenceDiagram
 - Users may need first-launch Gatekeeper bypass on downloaded artifacts:
   - Right-click app -> Open
   - Or remove quarantine:
-    - `xattr -dr com.apple.quarantine MediaVault.app`
+    - `xattr -dr com.apple.quarantine MediaMagic.app`
 
 ### Developer ID identity not found
 
@@ -112,7 +112,7 @@ GitHub supports marking a release as **Pre-release** without renaming the tag.
 - **Command:**
 
 ```bash
-MEDIAVAULT_PRERELEASE=1 ./build.sh release
+MEDIA_MAGIC_PRERELEASE=1 ./build.sh release
 ```
 
 This passes `--prerelease` to `gh release create` / `gh release edit` and appends a short note to the generated release body.
@@ -128,7 +128,7 @@ That tag is **not** wired into `build.sh` today; the downloadable asset remains 
 
 ## CI: compile check (GitHub Actions)
 
-The workflow `.github/workflows/mediavault.yml` runs on `push` and `pull_request` to `main` and compiles all `Sources/MediaVault/*.swift` with the same macOS deployment target as `build.sh`.
+The workflow `.github/workflows/media-magic.yml` runs on `push` and `pull_request` to `main` and compiles all `Sources/MediaMagic/*.swift` with the same macOS deployment target as `build.sh`.
 
 It does **not** run `./build.sh` because that increments `BUILD_NUMBER` and clones FileBot scripts. Full signed releases remain a **maintainer-local** `./build.sh release` (requires Developer ID + `gh` auth).
 

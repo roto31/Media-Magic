@@ -1,6 +1,6 @@
-# MediaVault orchestration, persistence, and controls
+# Media Magic orchestration, persistence, and controls
 
-This document describes the **current** MediaVault architecture after the job-orchestration redesign. It is derived from the Swift sources under `Sources/MediaVault/`.
+This document describes the **current** Media Magic architecture after the job-orchestration redesign. It is derived from the Swift sources under `Sources/MediaMagic/`.
 
 ## Goals (what shipped)
 
@@ -13,8 +13,8 @@ This document describes the **current** MediaVault architecture after the job-or
 ## Repository layout (Swift app)
 
 ```text
-Sources/MediaVault/
-  MediaVaultApp.swift          # App entry, recovery task, terminate hook
+Sources/MediaMagic/
+  MediaMagicApp.swift          # App entry, recovery task, terminate hook
   ContentView.swift            # Lane-aware queue + run controls
   PipelineController.swift   # MainActor facade + log projection
   ConversionOrchestrator.swift  # actor: scheduling, Process I/O, persistence fan-out
@@ -49,12 +49,12 @@ flowchart LR
     PC -->|"enqueue / pause / stop / refreshToolPaths"| CO
     CO -->|"replaceAll snapshots"| CJS
     CO -->|"AsyncStream events"| PC
-    CJS -->|"~/Library/.../MediaVault/state/jobs.json"| Disk[("JSON on disk")]
+    CJS -->|"~/Library/.../MediaMagic/state/jobs.json"| Disk[("JSON on disk")]
 ```
 
 ## Lane scheduling
 
-Default limits are defined where `PipelineController` constructs `ConversionOrchestrator` (see `MediaVaultApp.init` / `PipelineController.init`): **file lane = 2** concurrent workers, **disc lane = 1** (optical drive is typically the bottleneck).
+Default limits are defined where `PipelineController` constructs `ConversionOrchestrator` (see `MediaMagicApp.init` / `PipelineController.init`): **file lane = 2** concurrent workers, **disc lane = 1** (optical drive is typically the bottleneck).
 
 ```mermaid
 flowchart TD
@@ -111,7 +111,7 @@ sequenceDiagram
 
 ## Sequence: graceful app termination
 
-`NSApplicationDelegate.applicationShouldTerminate` returns `.terminateLater` while the pipeline asks the orchestrator to flush state and kill children. See `MediaVaultApp.swift` / `AppDelegate`.
+`NSApplicationDelegate.applicationShouldTerminate` returns `.terminateLater` while the pipeline asks the orchestrator to flush state and kill children. See `MediaMagicApp.swift` / `AppDelegate`.
 
 ```mermaid
 sequenceDiagram
@@ -133,7 +133,7 @@ sequenceDiagram
 
 The attached historical plan mentioned SQLite; the **implemented** store is a versioned JSON document:
 
-- Path: `~/Library/Application Support/MediaVault/state/jobs.json`
+- Path: `~/Library/Application Support/MediaMagic/state/jobs.json`
 - Writer: `ConversionJobStore` uses `Data.write(..., .atomic)` for crash-safe replacement.
 - Decoder uses **ISO-8601** dates to match the encoder (required for round-trip).
 
@@ -183,7 +183,7 @@ Project policy (`.cursor/rules` and `build.sh`) uses GitHub release tags of the 
 To mark a GitHub Release as **Pre-release** while keeping that tag format, run:
 
 ```bash
-MEDIAVAULT_PRERELEASE=1 ./build.sh release
+MEDIA_MAGIC_PRERELEASE=1 ./build.sh release
 ```
 
 See `docs/BUILD_PROCESS.md` for details.

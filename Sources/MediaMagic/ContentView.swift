@@ -137,7 +137,7 @@ struct ContentView: View {
                 .font(.system(size: 28, weight: .light))
                 .foregroundStyle(.tint)
             VStack(alignment: .leading, spacing: 2) {
-                Text("MediaVault")
+                Text("Media Magic")
                     .font(.system(size: 20, weight: .semibold))
                 Text("Disc & video → Apple TV library")
                     .font(.system(size: 12))

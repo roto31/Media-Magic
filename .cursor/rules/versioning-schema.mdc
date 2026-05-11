@@ -11,7 +11,7 @@ alwaysApply: true
 - Keep `BUILD_NUMBER` as a non-negative integer.
 - For every successful build:
   - Increment `BUILD_NUMBER` by exactly 1.
-  - Write artifact to `builds/<VERSION>+<BUILD_NUMBER>/MediaVault.app`.
+  - Write artifact to `builds/<VERSION>+<BUILD_NUMBER>/MediaMagic.app`.
 - Never overwrite an existing build folder for a new build.
 - `CFBundleShortVersionString` must equal `VERSION`.
 - `CFBundleVersion` must equal the incremented numeric `BUILD_NUMBER`.
