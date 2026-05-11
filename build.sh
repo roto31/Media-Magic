@@ -77,17 +77,68 @@ package_release_asset() {
     ditto -c -k --sequesterRsrc --keepParent "$APP" "$ASSET_PATH"
 }
 
+# Resolve a string suitable for `codesign --sign`: full identity name, or
+# 40-hex SHA-1 from `security find-identity` (set DEVELOPER_ID_SIGNING_HASH to
+# bypass name matching).
+resolve_codesign_identity() {
+    local want="${DEVELOPER_ID_APPLICATION:-}"
+    local team="${DEVELOPER_ID_TEAM:-PM529U3B66}"
+    local list
+    list="$(security find-identity -v -p codesigning 2>/dev/null || true)"
+
+    if [[ -n "${DEVELOPER_ID_SIGNING_HASH:-}" ]]; then
+        # 40 hex chars — paste from `security find-identity` first column after ")".
+        echo "${DEVELOPER_ID_SIGNING_HASH}"
+        return 0
+    fi
+
+    local line=""
+    if [[ -n "$want" ]]; then
+        line="$(echo "$list" | grep 'Developer ID Application' | grep -F "$want" | head -n 1 || true)"
+    fi
+    if [[ -z "$line" && -n "$team" ]]; then
+        line="$(echo "$list" | grep 'Developer ID Application' | grep -F "$team" | head -n 1 || true)"
+    fi
+    if [[ -z "$line" ]]; then
+        echo ""
+        return 1
+    fi
+
+    # Typical line: `  1) <40-hex> "Developer ID Application: … (TEAM)"`
+    if [[ "$line" =~ \"([^\"]+)\" ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return 0
+    fi
+    # Fallback: second token is often the SHA-1 hash.
+    echo "$line" | awk '{print $2}'
+}
+
 sign_release_app() {
-    local matched_identity
-    matched_identity="$(security find-identity -v -p codesigning 2>/dev/null | grep -F "$DEVELOPER_ID_APPLICATION" | head -n 1 || true)"
-    if [[ -z "$matched_identity" ]]; then
-        echo "ERROR: Developer ID identity not found: $DEVELOPER_ID_APPLICATION" >&2
-        echo "Install/import the certificate, or override with DEVELOPER_ID_APPLICATION." >&2
+    local signing_id
+    if ! signing_id="$(resolve_codesign_identity)"; then
+        signing_id=""
+    fi
+    if [[ -z "$signing_id" ]]; then
+        echo "ERROR: No usable Developer ID Application identity in your keychain." >&2
+        echo "" >&2
+        echo "Apple only lists identities that include a **private key**. Importing" >&2
+        echo "only \`developerID_application.cer\` is not enough — you need the" >&2
+        echo "certificate **with private key** (e.g. \`.p12\` from the Mac that created" >&2
+        echo "the CSR, or Keychain export). Then run:" >&2
+        echo "  security find-identity -v -p codesigning | grep 'Developer ID Application'" >&2
+        echo "" >&2
+        echo "Optional: set DEVELOPER_ID_SIGNING_HASH to the 40-character hex id from" >&2
+        echo "the left column of a matching line, or adjust DEVELOPER_ID_APPLICATION /" >&2
+        echo "DEVELOPER_ID_TEAM (default team id PM529U3B66)." >&2
+        echo "" >&2
+        echo "--- security find-identity -v -p codesigning (full list) ---" >&2
+        security find-identity -v -p codesigning 2>&1 | sed 's/^/  /' >&2 || true
+        echo "------------------------------------------------------------" >&2
         exit 1
     fi
 
-    echo "▸ Signing app with Developer ID identity"
-    codesign --force --deep --options runtime --timestamp --sign "$DEVELOPER_ID_APPLICATION" "$APP"
+    echo "▸ Signing app with: ${signing_id}"
+    codesign --force --deep --options runtime --timestamp --sign "$signing_id" "$APP"
     codesign --verify --deep --strict --verbose=2 "$APP"
 }
 
