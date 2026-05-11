@@ -119,6 +119,8 @@ sign_release_app() {
         signing_id=""
     fi
     if [[ -z "$signing_id" ]]; then
+        local full_list
+        full_list="$(security find-identity -v -p codesigning 2>/dev/null || true)"
         echo "ERROR: No usable Developer ID Application identity in your keychain." >&2
         echo "" >&2
         echo "Apple only lists identities that include a **private key**. Importing" >&2
@@ -131,8 +133,16 @@ sign_release_app() {
         echo "the left column of a matching line, or adjust DEVELOPER_ID_APPLICATION /" >&2
         echo "DEVELOPER_ID_TEAM (default team id PM529U3B66)." >&2
         echo "" >&2
+        if echo "$full_list" | grep -q 'Apple Development' && ! echo "$full_list" | grep -q 'Developer ID Application'; then
+            echo "NOTE: You have **Apple Development** (Xcode / personal team) but not **Developer ID Application**." >&2
+            echo "They are different certificate types. \`./build.sh release\` needs **Developer ID Application**" >&2
+            echo "for shipping outside the App Store. Create one in Apple Developer → Certificates → + →" >&2
+            echo "Developer ID → Application, then install the downloaded cert on the Mac that submitted the CSR" >&2
+            echo "(or import a .p12 that contains that cert + private key)." >&2
+            echo "" >&2
+        fi
         echo "--- security find-identity -v -p codesigning (full list) ---" >&2
-        security find-identity -v -p codesigning 2>&1 | sed 's/^/  /' >&2 || true
+        echo "$full_list" | sed 's/^/  /' >&2 || true
         echo "------------------------------------------------------------" >&2
         exit 1
     fi

@@ -82,6 +82,8 @@ sequenceDiagram
 
 `security find-identity -v -p codesigning` only lists identities that have a **private key** in your keychain. Importing Apple’s **`developerID_application.cer`** alone adds the public certificate only — **`codesign` will not list a usable identity for it**.
 
+**Apple Development** (e.g. `Apple Development: Your Name (TEAMID)`) is for Xcode / personal-team signing. It is **not** a substitute for **Developer ID Application**, which `./build.sh release` requires for distributable macOS binaries outside the Mac App Store.
+
 Fix:
 
 1. Install the certificate **with private key** (e.g. **`.p12`** exported from the Mac that created the CSR, or from Keychain on that machine: *My Certificates* → right‑click → Export).
